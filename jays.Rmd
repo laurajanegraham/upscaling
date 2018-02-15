@@ -1,0 +1,182 @@
+---
+title: "Upscaling: Jay Case Study"
+author: "Laura Graham"
+date: "8 November 2017"
+output: html_document
+bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+library(winmoveR)
+library(raster)
+library(rgdal)
+library(rgeos)
+library(ggmap)
+library(cowplot)
+library(sf)
+library(tidyverse)
+```
+
+# Case study 1: Forest 
+
+First we need to load in and spatialise the Jay data. These were provided by Simon Gillings at the BTO.  
+```{r bto_data}
+jays <- read_sf("../DATA/bng/10km_grid_region.shp") %>% 
+  rename(grid = TILE_NAME) %>% 
+  inner_join(read_csv("../DATA/bto_jays/extract.csv") %>% 
+               rename(grid = tenkm, index_1990 = index90, index_2010 = index10)) %>%
+  select(index_1990, index_2010, geometry) %>%
+  filter(!is.na(geometry))
+
+plot(jays)
+```
+
+The data for which we want to use the upscaling approach on is lcm2015. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). We will calculate Shannon Diversity on just these two habitats. We will also calculate amount at the 10km scale. 
+
+```{r}
+lcm <- raster("../DATA/lcm/lcm2007_25m_gb.tif")
+
+# grid needs to be SpatialPolygonsDataFrame until I update the winmoveR package to use sf objects
+bng <- as(jays, 'Spatial')
+
+# shannon via moving window
+bng$shannon_win <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, type = "rectangle", fn = "diversity", lc_class = c(1, 2))
+
+# shannon without moving window - move this into the winmover package at some point
+diversity <- function(grid, dat, lc_class) {
+  x.log <- function(x) ifelse(x==0, 0, x*log(x))
+  entropy.r <- lapply(lc_class, function(i) {
+      raster::calc(raster::focal(dat == i, nbrhd), x.log)
+    })
+    return ((0 - sum(raster::stack(entropy.r)))/log(length(lc_class)))
+}
+
+# temperature from worldclim
+wc_bio <- getData('worldclim', var = 'bio', res=5)
+tavg <- wc_bio[[1]]
+
+bng_pts <- gCentroid(bng, byid=TRUE)
+bng$tavg <- extract(tavg, bng_pts)
+```
+
+
+
+##### BELOW HERE IS THE FOREST STUFF FOR DELETING ONCE I'VE TAKEN WHAT I NEED FROM IT ####### 
+```{r projection}
+# get forest and climate data in same projection as elev and crop worldclim data by the EU forest dataset
+eu_forests_pts <- spTransform(eu_forests_pts, crs(elev))
+wc_bio_30 <- projectRaster(wc_bio_30, crs = crs(elev))
+```
+
+Next, we crop the data to the extent of the elevation data. Here we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. 
+
+```{r cropping}
+bounds <- extent(elev) 
+wc_bio_eu <- crop(wc_bio_30, bounds)
+```
+
+Next, we need to rasterize the EU Forests data to get a species richness per 0.5 degree grid cell. We will then convert this to a grid, which is what we will use to do the moving window analysis. 
+
+```{r gridding}
+# rasterise the EU forest data to create total species richness (the input function gets the total number of unique species in a cell)
+eu_forests_r <- rasterize(eu_forests_pts, wc_bio_eu, fun=function(x, ...){ length(unique(na.omit(x)))})[[2]]
+
+# create a grid for the moving window and elevation aggregation to loop through - I want to move this into the package at some point
+eu_grid <- as(eu_forests_r, 'SpatialPolygonsDataFrame')
+```
+
+Now, we want to aggregate the elevation to 100m (from 25m) both for ease of computation and *is there a biological reason??* - also characteristic scale of variation? doesn't really change visually much from 25m to 100m - need to do some kind of test to make sure this simplification if valid. 
+
+In this step we also aggregate the elevation so that we get a grid level variance (to compare this to the moving window variance)
+
+```{r agg_elev}
+# function for extracting a grid cell and then performing the aggregate - cannot aggregate whole EU at once due to disk space
+agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
+  cell <- grid[cell_no,]
+  dat_cell <- crop(dat, cell, filename='../temp_raster/temp_crop.tif', overwrite=TRUE)
+  dat_cell_agg <- aggregate(dat_cell, fact, fun = fn, filename='../temp_raster/temp_agg.tif', overwrite=TRUE)
+  zero_to_na <- function(x) ifelse(x==0, NA, x)
+  dat_cell_na <- calc(dat_cell_agg, zero_to_na, ...)
+}
+
+elev_cell_100 <- list()
+
+for(cell_no in 1:length(eu_grid)) {
+  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
+}
+
+# need to add the arguments to mosaic as attributes of the raster list. 
+rasters.mosaicargs <- elev_cell_100
+rasters.mosaicargs$fun <- mean
+rasters.mosaicargs$filename <- '../../data/elev/eudem_100m_aggregated.tif'
+rasters.mosaicargs$overwrite <- TRUE
+elev_100 <- do.call(mosaic, rasters.mosaicargs)
+
+# create the grid level elevation variance
+elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var)
+```
+
+We need the grid cell level variance in elevation
+
+```{r elev_var}
+# create the grid level elevation variance
+rm(elev_grid) # this stupid bit of code is thanks to the minor idiocy above of not writing out the temp file somewhere sensible
+elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var, filename='../temp_raster/elev_grid.tif', overwrite=TRUE)
+```
+
+In this step we use the `winmoveR` package to upscale the elevation data to 30 arcseconds using the moving window approach. We are currently testing three window sizes: 500m, 1km and 2km. Will need to have a think about this in terms of whether it makes biological sense.
+
+```{r upscale}
+# upscale the eu elevation data using the moving window approach
+eu_grid$win_var_500 <- winmove_upscale(eu_grid, elev_100, 500, "rectangle", "var", na.rm=TRUE)$V1
+eu_grid$win_var_1000 <- winmove_upscale(eu_grid, elev_100, 1000, "rectangle", "var", na.rm=TRUE)$V1
+eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, "rectangle", "var", na.rm=TRUE)$V1
+```
+
+Now we want to create a raster stack of all of our variables, then turn it into a dataframe. First, the `win_var` variable should be rasterised. 
+
+```{r stacking}
+win_var_500 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_500, fun = "mean")
+win_var_1000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
+win_var_2000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
+var_list <- lapply(list(eu_forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu), function(x) crop(x, elev_grid))
+var_stack <- stack(var_list)
+names(var_stack)[1:5] <- c("sp_rich", "win_var_500", "win_var_1000", "win_var_2000", "elev_var")
+writeRaster(var_stack, filename="../results/eu_forests_vars.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
+var_df <- as.data.frame(var_stack) %>% filter_all(all_vars(!is.na(.))) %>% write_csv("../results/eu_forests_vars.csv")
+```
+
+Now all of the variables are in one place, let's do some analysis on them:
+
+```{r cor}
+var_df_temp <- dplyr::select(var_df, sp_rich, win_var_500, win_var_1000, win_var_2000, elev_var, bio1, bio12)
+plot(var_df)
+```
+
+
+# Case study 2: *Garrulus glandarius*
+```{r, eval=FALSE, echo=FALSE}
+lcm <- raster("../../data/lcm/lcm2007_25m_gb.tif")
+bng <- readOGR("../../data/bng", "10km_grid_region", verbose=FALSE)
+
+# shannon via moving window
+bng$shannon_win <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, type = "rectangle", fn = "diversity", lc_class = c(1, 2))
+
+# shannon without moving window
+diversity <- function(grid, dat, lc_class) {
+  x.log <- function(x) ifelse(x==0, 0, x*log(x))
+  entropy.r <- lapply(lc_class, function(i) {
+      raster::calc(raster::focal(dat == i, nbrhd), x.log)
+    })
+    return ((0 - sum(raster::stack(entropy.r)))/log(length(lc_class)))
+}
+# temperature from worldclim
+wc_bio <- getData('worldclim', var = 'bio', res=5)
+tavg <- wc_bio[[1]]
+
+bng_pts <- gCentroid(bng, byid=TRUE)
+bng$tavg <- extract(tavg, bng_pts)
+```
