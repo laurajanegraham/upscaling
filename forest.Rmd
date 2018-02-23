@@ -18,6 +18,10 @@ library(ggmap)
 library(cowplot)
 library(sf)
 library(tidyverse)
+
+varorder <- c("sprich", "winvar2000", "elevvar", "bio1", "bio12", "bio15")
+coefforder <- c("winvar2000", "elevvar", "bio1", "bio12", "bio15")
+coefflabels <- c("MW Elevation (2km)", "LS Elevation", "Temperature", "Precipitation", "Precipitation\nseasonality")
 ```
 
 # Case study 2: Forest 
@@ -49,10 +53,10 @@ wc_bio <- getData('worldclim', var = "bio", res = 10, path = "../data/worldclim/
 wc_bio_30 <- aggregate(wc_bio, 3)
 
 # load in the elevation data
-elev <- raster("../../data/elev/eudem_dem_3035_europe.tif")
+elev <- raster("../DATA/elev/eudem_dem_3035_europe.tif")
 
 # get forest and climate data in same projection as elev and crop worldclim data by the EU forest dataset
-eu_forests_pts <- spTransform(eu_forests_pts, crs(elev))
+forests <- spTransform(forests, crs(elev))
 wc_bio_30 <- projectRaster(wc_bio_30, crs = crs(elev))
 
 # crop climate data
@@ -60,10 +64,10 @@ bounds <- extent(elev)
 wc_bio_eu <- crop(wc_bio_30, bounds)
 
 # rasterise the EU forest data to create total species richness (the input function gets the total number of unique species in a cell)
-eu_forests_r <- rasterize(eu_forests_pts, wc_bio_eu, fun=function(x, ...){ length(unique(na.omit(x)))})[[2]]
+forests_r <- rasterize(forests, wc_bio_eu, fun=function(x, ...){ length(unique(na.omit(x)))})[[2]]
 
 # create a grid for the moving window and elevation aggregation to loop through - I want to move this into the package at some point
-eu_grid <- as(eu_forests_r, 'SpatialPolygonsDataFrame')
+eu_grid <- as(forests_r, 'SpatialPolygonsDataFrame')
 
 agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
   cell <- grid[cell_no,]
@@ -76,19 +80,19 @@ agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
 elev_cell_100 <- list()
 
 for(cell_no in 1:length(eu_grid)) {
-  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
+  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../DATA/temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
 }
 
 # need to add the arguments to mosaic as attributes of the raster list. 
 rasters.mosaicargs <- elev_cell_100
 rasters.mosaicargs$fun <- mean
-rasters.mosaicargs$filename <- '../../data/elev/eudem_100m_aggregated.tif'
+rasters.mosaicargs$filename <- '../DATA/elev/eudem_100m_aggregated.tif'
 rasters.mosaicargs$overwrite <- TRUE
 elev_100 <- do.call(mosaic, rasters.mosaicargs)
 
 # create the grid level elevation variance
-elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var,
-                       filename='../temp_raster/elev_grid.tif', overwrite=TRUE)
+elev_grid <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = var,
+                       filename='../DATA/temp_raster/elev_grid.tif', overwrite=TRUE)
 
 # upscale the eu elevation data using the moving window approach
 eu_grid$win_var_500 <- winmove_upscale(eu_grid, elev_100, 500, "rectangle", "var", na.rm=TRUE)$V1
@@ -96,22 +100,118 @@ eu_grid$win_var_1000 <- winmove_upscale(eu_grid, elev_100, 1000, "rectangle", "v
 eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, "rectangle", "var", na.rm=TRUE)$V1
 
 # stack variables
-win_var_500 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_500, fun = "mean")
-win_var_1000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
-win_var_2000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
+win_var_500 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_500, fun = "mean")
+win_var_1000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
+win_var_2000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
 
-var_list <- lapply(list(eu_forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu),
+var_list <- lapply(list(forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu),
                    function(x) crop(x, elev_grid))
 var_stack <- stack(var_list)
-names(var_stack)[1:5] <- c("sp_rich", "win_var_500", "win_var_1000", "win_var_2000", "elev_var")
-writeRaster(var_stack, filename="../results/eu_forests_vars.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
-var_df <- as.data.frame(var_stack) %>% na.omit %>% 
-  write_csv("../results/eu_forests_vars.csv")
+names(var_stack)[1:5] <- c("sprich", "winvar500", "winvar1000", "winvar2000", "elevvar")
+writeRaster(var_stack, filename="results/forests_covariates.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
+forests_df <- as.data.frame(var_stack, xy = TRUE) %>% na.omit
+save(forests_df, file="results/forests_covariates.Rda")
 ```
 
-Now all of the variables are in one place, let's do some analysis on them:
+### Exploration and transformation
 
-```{r cor}
-var_df_temp <- dplyr::select(var_df, sp_rich, win_var_500, win_var_1000, win_var_2000, elev_var, bio1, bio12)
-plot(var_df)
+What do the variables look like spatially?
+
+```{r spatial_plot, fig.width = 12}
+load("results/forests_covariates.Rda")
+
+forests_narrow <- mutate_at(forests_df, .vars = vars(-sprich), .funs = funs(scale)) %>%
+  gather(variable, value, -x, -y) %>%
+  filter(variable %in% coefforder) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabels))
+
+sp_plot <- ggplot(forests_df, aes(x = x, y = y, fill = sprich)) + 
+  geom_raster() + coord_equal() + 
+  scale_fill_viridis_c(name = "Species Richness", option = "magma") + 
+  xlab("") + ylab("") + theme(axis.text = element_blank())
+
+cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) + 
+  geom_raster() + coord_equal() + 
+  facet_wrap(~variable) +
+  scale_fill_viridis_c() + 
+  xlab("") + ylab("") + theme(axis.text = element_blank())
+
+plot_grid(sp_plot, cov_plot)
 ```
+
+what are the minimum and maximum values? 
+
+```{r maxmin_data}
+select(forests_df, varorder) %>%
+  summarise_all(funs(min, max)) %>% 
+  gather(variable, value) %>% 
+  separate(variable, into = c("variable", "minmax"), sep="_") %>%
+  spread(minmax, value) %>% select(variable, min, max) %>%
+  mutate(variable = factor(variable, levels = varorder)) %>%
+  arrange(variable) %>%
+  kable(digits = 3)
+```
+
+How are the variables distributed?
+
+```{r distribution}
+forests_narrow <- gather(forests_df, variable, value) %>% 
+  # order variables by response, interested, covariate
+  filter(variable %in% varorder) %>%
+  mutate(variable = factor(variable, levels = varorder))
+
+ggplot(forests_narrow, aes(x = value)) + 
+  geom_histogram(bins = 30) + 
+  facet_wrap(~variable, scales = "free_x")
+```
+
+Species richness ideal for Poisson distribution, right skew to MW Elevation and LS elevation, as well as the precipitation variables. 
+
+And where are the correlations?
+
+```{r pairs}
+ggpairs(forests_df %>% select(varorder))
+```
+
+Not so great. WB Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). 
+
+Note that I chose 2 km because it made sense, but when doing this with other window sizes, the correlation was lower. Perhaps I need to try larger window sizes (and look up a biologically meaningful reason).
+```{r transform}
+# optimise to find optimal value for log transform
+skew.score <- function(c, x) (skewness(log(x + c)))^2
+c.winvar2000 <- optimise(skew.score, c(0, 20), x = forests_df$winvar2000)$minimum
+c.elevvar <- optimise(skew.score, c(0, 20), x = forests_df$elevvar)$minimum
+c.bio12 <- optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum
+c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
+
+
+forests_df_t <- select(forests_df, varorder) %>% 
+  mutate(winvar2000 = log(winvar2000 + c.winvar2000),
+         elevvar = log(elevvar + c.elevvar),
+         bio12 = log(bio12 + c.bio12),
+         bio15 = log(bio15 + c.bio15))
+
+forests_narrow_t <- gather(forests_df_t, variable, value) %>% 
+  mutate(variable = factor(variable, varorder))
+
+ggplot(forests_narrow_t, aes(x = value)) + 
+  geom_histogram(bins = 30) + 
+  facet_wrap(~variable, scales = "free_x")
+```
+
+Better, stick with this for now. It's fine because we don't need to interpret these coefficients. 
+
+Now scale the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
+
+```{r scale_data}
+forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scale))
+```
+
+## Models
+
+### Global model
+
+```{r}
+mod_global <- glm(sprich ~ winvar2000 * elevvar * bio1 * bio12 * bio15, family = "poisson", data = forests_df_t, na.action = na.fail)
+```
+
