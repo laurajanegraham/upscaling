@@ -1,76 +1,70 @@
 ---
 title: "Upscaling: Forest Case Study"
 author: "Laura Graham"
-date: "8 November 2017"
-output: html_document
+output: 
+  html_document:
+    toc: true
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(cache = TRUE)
-library(tidyverse)
 library(winmoveR)
 library(raster)
 library(rgdal)
 library(rgeos)
-library(ggplot2)
 library(ggmap)
 library(cowplot)
+library(sf)
+library(tidyverse)
 ```
 
-# Case study 1: Forest 
+# Case study 2: Forest 
 
-First we need to load in and spatialise the EU forest data. These are data from @Mauri2017. 
-```{r euforest}
-eu_forests <- read_csv("../../data/eu_forests/eu_forest_species.csv") %>% mutate(sp_name = `SPECIES NAME`) %>% dplyr::select(X, Y, sp_name)
-eu_forests_pts <- SpatialPointsDataFrame(eu_forests[,1:2], eu_forests[,3], proj4string = crs("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
+## Data
+
+### EU forest data
+
+First we need to load in and spatialise the EU forest data. These are data from @Mauri2017. Available for dowload on [figshare](https://ndownloader.figshare.com/files/6662535)
+```{r euforest_data}
+forests <- read_csv("../DATA/eu_forests/eu_forest_species.csv") %>% 
+  mutate(sp_name = `SPECIES NAME`) %>% 
+  dplyr::select(X, Y, sp_name)
+
+forests <- SpatialPointsDataFrame(forests[,1:2], forests[,3], proj4string = crs("+proj=laea +lat_0=52 +lon_0=10 +x_0=4321000 +y_0=3210000 +ellps=GRS80 +units=m +no_defs"))
 ```
 
-Now we need worldclim data - we'll get all of the bioclim variables, but will probably only use temperature, and perhaps precipitation. We need to aggregate it to 30 arcseconds, which is the scale at which our analysis is taking place.  
-```{r worldclim}
-wc_bio <- getData('worldclim', var = "bio", res = 10)
+### Environmental data
+
+The data to be upscaled are the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). Note that these are in a specific European projection: European Grid: ETRS89-LAEA. All other datasets will be transformed to this projection. By cropping all datasets to the extent of the EU elevation data, we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. We aggregate the elevation to 100m (from 25m) both for ease of computation and *is there a biological reason??* - also characteristic scale of variation? doesn't really change visually much from 25m to 100m - need to do some kind of test to make sure this simplification if valid. 
+
+We will use the moving window to upscale the variation in elevation at three scales: 500 m, 1 km, 2 km. We do not have *a priori* expectation of the appropriate scale of effect, but we do have reason to expect that variation in elevation will determine species richness due to the opening up of niche space [citations]. We will also calculate variation in elevation at the 0.5 degree scale. As covariates, to avoid confounding variables, we will calculate average temperature and precipitation at the 0.5 degree scale. 
+
+```{r envdata, eval = FALSE}
+# This section only gets run the first time (or if changed) and the output saved
+# to file. Set eval = FALSE at all other times.
+
+wc_bio <- getData('worldclim', var = "bio", res = 10, path = "../data/worldclim/")
 wc_bio_30 <- aggregate(wc_bio, 3)
-```
 
-Next we need the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). 
-
-```{r elev}
 # load in the elevation data
 elev <- raster("../../data/elev/eudem_dem_3035_europe.tif")
-```
 
-Now we need to get everything into the appropriate projection. We are going to go for the projection of the elevation data, because this is specific to the EU. This is the European Grid: ETRS89-LAEA. 
-
-```{r projection}
 # get forest and climate data in same projection as elev and crop worldclim data by the EU forest dataset
 eu_forests_pts <- spTransform(eu_forests_pts, crs(elev))
 wc_bio_30 <- projectRaster(wc_bio_30, crs = crs(elev))
-```
 
-Next, we crop the data to the extent of the elevation data. Here we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. 
-
-```{r cropping}
+# crop climate data
 bounds <- extent(elev) 
 wc_bio_eu <- crop(wc_bio_30, bounds)
-```
 
-Next, we need to rasterize the EU Forests data to get a species richness per 0.5 degree grid cell. We will then convert this to a grid, which is what we will use to do the moving window analysis. 
-
-```{r gridding}
 # rasterise the EU forest data to create total species richness (the input function gets the total number of unique species in a cell)
 eu_forests_r <- rasterize(eu_forests_pts, wc_bio_eu, fun=function(x, ...){ length(unique(na.omit(x)))})[[2]]
 
 # create a grid for the moving window and elevation aggregation to loop through - I want to move this into the package at some point
 eu_grid <- as(eu_forests_r, 'SpatialPolygonsDataFrame')
-```
 
-Now, we want to aggregate the elevation to 100m (from 25m) both for ease of computation and *is there a biological reason??* - also characteristic scale of variation? doesn't really change visually much from 25m to 100m - need to do some kind of test to make sure this simplification if valid. 
-
-In this step we also aggregate the elevation so that we get a grid level variance (to compare this to the moving window variance)
-
-```{r agg_elev}
-# function for extracting a grid cell and then performing the aggregate - cannot aggregate whole EU at once due to disk space
 agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
   cell <- grid[cell_no,]
   dat_cell <- crop(dat, cell, filename='../temp_raster/temp_crop.tif', overwrite=TRUE)
@@ -93,37 +87,26 @@ rasters.mosaicargs$overwrite <- TRUE
 elev_100 <- do.call(mosaic, rasters.mosaicargs)
 
 # create the grid level elevation variance
-elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var)
-```
+elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var,
+                       filename='../temp_raster/elev_grid.tif', overwrite=TRUE)
 
-We need the grid cell level variance in elevation
-
-```{r elev_var}
-# create the grid level elevation variance
-rm(elev_grid) # this stupid bit of code is thanks to the minor idiocy above of not writing out the temp file somewhere sensible
-elev_grid <- aggregate(elev_100, res(eu_forests_r)/res(elev_100), fun = var, filename='../temp_raster/elev_grid.tif', overwrite=TRUE)
-```
-
-In this step we use the `winmoveR` package to upscale the elevation data to 30 arcseconds using the moving window approach. We are currently testing three window sizes: 500m, 1km and 2km. Will need to have a think about this in terms of whether it makes biological sense.
-
-```{r upscale}
 # upscale the eu elevation data using the moving window approach
 eu_grid$win_var_500 <- winmove_upscale(eu_grid, elev_100, 500, "rectangle", "var", na.rm=TRUE)$V1
 eu_grid$win_var_1000 <- winmove_upscale(eu_grid, elev_100, 1000, "rectangle", "var", na.rm=TRUE)$V1
 eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, "rectangle", "var", na.rm=TRUE)$V1
-```
 
-Now we want to create a raster stack of all of our variables, then turn it into a dataframe. First, the `win_var` variable should be rasterised. 
-
-```{r stacking}
+# stack variables
 win_var_500 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_500, fun = "mean")
 win_var_1000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
 win_var_2000 <- rasterize(eu_grid, eu_forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
-var_list <- lapply(list(eu_forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu), function(x) crop(x, elev_grid))
+
+var_list <- lapply(list(eu_forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu),
+                   function(x) crop(x, elev_grid))
 var_stack <- stack(var_list)
 names(var_stack)[1:5] <- c("sp_rich", "win_var_500", "win_var_1000", "win_var_2000", "elev_var")
 writeRaster(var_stack, filename="../results/eu_forests_vars.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
-var_df <- as.data.frame(var_stack) %>% filter_all(all_vars(!is.na(.))) %>% write_csv("../results/eu_forests_vars.csv")
+var_df <- as.data.frame(var_stack) %>% na.omit %>% 
+  write_csv("../results/eu_forests_vars.csv")
 ```
 
 Now all of the variables are in one place, let's do some analysis on them:
@@ -131,29 +114,4 @@ Now all of the variables are in one place, let's do some analysis on them:
 ```{r cor}
 var_df_temp <- dplyr::select(var_df, sp_rich, win_var_500, win_var_1000, win_var_2000, elev_var, bio1, bio12)
 plot(var_df)
-```
-
-
-# Case study 2: *Garrulus glandarius*
-```{r, eval=FALSE, echo=FALSE}
-lcm <- raster("../../data/lcm/lcm2007_25m_gb.tif")
-bng <- readOGR("../../data/bng", "10km_grid_region", verbose=FALSE)
-
-# shannon via moving window
-bng$shannon_win <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, type = "rectangle", fn = "diversity", lc_class = c(1, 2))
-
-# shannon without moving window
-diversity <- function(grid, dat, lc_class) {
-  x.log <- function(x) ifelse(x==0, 0, x*log(x))
-  entropy.r <- lapply(lc_class, function(i) {
-      raster::calc(raster::focal(dat == i, nbrhd), x.log)
-    })
-    return ((0 - sum(raster::stack(entropy.r)))/log(length(lc_class)))
-}
-# temperature from worldclim
-wc_bio <- getData('worldclim', var = 'bio', res=5)
-tavg <- wc_bio[[1]]
-
-bng_pts <- gCentroid(bng, byid=TRUE)
-bng$tavg <- extract(tavg, bng_pts)
 ```
