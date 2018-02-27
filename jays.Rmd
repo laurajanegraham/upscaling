@@ -29,6 +29,7 @@ library(stringr)
 library(tidyverse)
 library(cowplot)
 library(GGally)
+library(betareg)
 
 # set up some options
 # for exploratory plotting
@@ -238,8 +239,12 @@ I'm not currently sure about interactions... I think it is useful to include int
 
 I need to properly look into the error structure for the models, because it is proportion data and therefore bounded at 0, 1. For now am incorrectly using normal distribution see [Warton and Hui 2011](http://onlinelibrary.wiley.com/doi/10.1890/10-0340.1/full) for discussion of analysis of proportion data. Normal distribution can be problematic with ratio data unless numerator variance >> denominator variance. In our case, the denominator is always the same, so it should be fine to model with a normal distribution? My main concern is it looks much more like a Poisson distribution (or zero-inflated for 1990 index).
 
+I'm going to try an attempt at Beta regression [@Cribari-Neto2010], which works for proportions without having the drawback of being uninterpretable on the scale of the variable (like regression with a logit transform would be). Beta regression doesn't work if the data are [0, 1]: needs to be (0, 1). 
+
 ```{r global_model}
-mod_global <- lm(index10 ~ habitat + winshannon + lsshannon + urban + tavg + habitat:lsshannon + habitat:winshannon, data = jay_df_t, na.action = na.fail)
+# for the binomial model we need to have the response as index and 1-index
+jay_df_t$y <- cbind(jay_df_t$index10, 1)
+mod_global <- glm(y ~ habitat + winshannon + lsshannon + urban + tavg + habitat:lsshannon + habitat:winshannon, family = "binomial", data = jay_df_t, na.action = na.fail)
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
