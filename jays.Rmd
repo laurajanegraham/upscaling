@@ -9,9 +9,11 @@ bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(cache = TRUE)
 knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(fig.width = 12, fig.height = 12)
+
 library(winmoveR)
 library(caret)
 library(raster)
@@ -19,14 +21,14 @@ library(rgdal)
 library(rgeos)
 library(ggmap)
 library(sf)
-library(tidyverse)
-library(cowplot)
-library(GGally)
 library(e1071) # optimising transformations
 library(knitr)
 library(broom)
 library(MuMIn)
 library(stringr)
+library(tidyverse)
+library(cowplot)
+library(GGally)
 
 # set up some options
 # for exploratory plotting
@@ -34,13 +36,20 @@ varorder <- c("index90", "index10",
                   "winshannon", "lsshannon", 
                   "habitat", "urban", "tavg")
 
+varlabel <- c("Abundance (1990 Atlas)", "Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
+              "Forest %", "Urban %", "Temperature")
 # for initial tables from models
-coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
+coefforder_int <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
                "habitat:winshannon", "habitat:lsshannon",
                "urban", "tavg")
 
+coefflabel_int <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
+                    "Forest % : MW Shannon", "Forest % : LS Shannon", 
+                    "Urban %", "Temperature")
+
+
 # for paper figures
-coefforder_noint <- c("winshannon", "winshannon_high", "winshannon_low", 
+coefforder <- c("winshannon", "winshannon_high", "winshannon_low", 
                       "lsshannon", "lsshannon_high", "lsshannon_low"
                       ,"habitat", "urban", "tavg"
                       )
@@ -50,6 +59,7 @@ coefflabel <- c("MW Shannon", "MW Shannon\n(high forest)", "MW Shannon\n(low for
                 
 
 modorder <- c("mod_global", "mod_simple", "mod_mmi")
+
 modlabels <- c("Global model", "Parsimonious model", "MMI average")
 ```
 
@@ -68,8 +78,6 @@ jays <- read_sf("../DATA/bng/10km_grid_region.shp") %>%
                rename(grid = tenkm)) %>%
   select(index90, index10, geometry) %>%
   filter(!is.na(geometry))
-
-plot(jays)
 ```
 
 ### Environmental data
@@ -122,21 +130,43 @@ save(jay_sp, file="results/jays_covariates.Rda")
 
 What do the variables look like spatially?
 
-```{r spatial_plot}
+```{r spatial_plot, fig.height = 8}
 load("results/jays_covariates.Rda")
-plot(jay_sp)
-# order variables by response, interested, covariate
-jay_df <- tbl_df(jay_sp) %>% select(index90, index10, lsshannon, winshannon, habitat, urban, tavg)
+
+jay_narrow <- jay_sp %>% 
+  mutate_at(.vars = vars(-index10, -index90, -geometry), .funs = funs(scale)) %>% 
+  gather(variable, value, -geometry)
+
+jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
+  geom_sf(aes(fill = value), colour = NA) +
+  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
+  scale_fill_viridis_c(name = "Jay abundance")
+
+covs <- jay_narrow %>% 
+  filter(variable %in% varorder[-(1:2)]) %>% 
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
+
+cov_plot <- ggplot(covs) + 
+  geom_sf(aes(fill = value), colour = NA) +
+  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
+  scale_fill_viridis_c() + facet_wrap(~variable)
+  
+spatial_plot <- plot_grid(jay_plot, cov_plot)
+save_plot("figures/jay_spatial_plot.png", spatial_plot, base_width = 10, base_aspect_ratio = 1:3)
+spatial_plot
 ```
 
 what are the minimum and maximum values? 
 
 ```{r maxmin_data}
+jay_df <- jay_sp %>% as.tibble %>% 
+  select(index90, index10, lsshannon, winshannon, habitat, urban, tavg)
+
 summarise_all(jay_df, funs(min, max) ) %>% 
   gather(variable, value) %>% 
   separate(variable, into = c("variable", "minmax"), sep="_") %>%
   spread(minmax, value) %>% select(variable, min, max) %>%
-  mutate(variable = factor(variable, levels = varorder)) %>%
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel)) %>%
   arrange(variable) %>%
   kable(digits = 3)
 ```
@@ -148,7 +178,7 @@ How are the variables distributed?
 ```{r distribution}
 jay_narrow <- gather(jay_df, variable, value) %>% 
   # order variables by response, interested, covariate
-  mutate(variable = factor(variable, levels = varorder))
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 ggplot(jay_narrow, aes(x = value)) + 
   geom_histogram(bins = 30) + 
   facet_wrap(~variable, scales = "free_x")
@@ -161,7 +191,7 @@ Right skew to habitat percentage and urban percentage, and left skew to temperat
 And where are the correlations?
 
 ```{r pairs}
-ggpairs(jay_df)
+ggpairs(jay_df, columnLabels = varlabel)
 ```
 
 Good sign to start! Strongest correlate of both indices is temperature followed by the window-based Shannon measure. After that it's urban percentage, followed by the landscape-based Shannon measure, followed by percentage cover of habitat. Interestingly, although both Shannon measures correlate with the amount of habitat, the window-based measure is least correlated with this (still very high). The `r cor(jay_df$winshannon, jay_df$lsshannon)` between the two Shannon measures means we will have issues with Type II errors when we include both - need to remember this. One point about the 'high' (not really high, but relative to other predictors) correlation between urban percentage and jay abundance: this is potentially an observation thing, but also jays are becoming more associated with urban habitats [parks, cemetaries etc, see @Holden2006], so it may be a real effect. Anyway, it's worth including. 
@@ -181,13 +211,12 @@ jay_df_t <- mutate(jay_df,
 
 jay_narrow_t <- gather(jay_df_t, variable, value) %>% 
   mutate(variable = factor(variable, 
-         levels=c("index90", "index10", 
-                  "lsshannon", "winshannon", 
-                  "habitat", "urban", "tavg")))
+         levels = varorder, labels = varlabel))
 
 ggplot(jay_narrow_t, aes(x = value)) + 
   geom_histogram(bins = 30) + 
   facet_wrap(~variable, scales = "free_x")
+
 ```
 
 Better, stick with this for now. It's fine because we don't need to interpret these coefficients. 
@@ -214,12 +243,12 @@ mod_global <- lm(index10 ~ habitat + winshannon + lsshannon + urban + tavg + hab
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(variable = factor(variable, levels = coefforder)) %>%
-  arrange(variable) 
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable) 
 globalp <- glance(mod_global)$p.value
 globalr2 <- glance(mod_global)$r.squared
 
-res_global %>% kable(digits=3)
+res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
 First model looks to fit my expectation - partial regression coefficient for window-based Shannon is significant and larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
@@ -232,10 +261,10 @@ Need to check how terrible this model is:
 jay_df_t$res_global <- mod_global$residuals
 jay_df_t$fit_global <- mod_global$fitted.values
 
-
 ggplot(jay_df_t, aes(x = fit_global, y = res_global)) + geom_point()
 ggplot(jay_df_t, aes(x = res_global)) + geom_histogram(binwidth = 0.05)
 ```
+
 
 It's quite bad. I think this is to do with using the normal distribution (we have negative predicted values, and no predicted values higher than `r max(jay_df_t$fit_global)`). Need to work out the right distribution for this and check again. 
 
@@ -243,17 +272,17 @@ It's quite bad. I think this is to do with using the normal distribution (we hav
 
 This model is determined using stepwise selection. 
 
-```{r simple_model}
+```{r simple_model, message = TRUE}
 mod_simple <- step(mod_global)
 
 res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(variable = factor(variable, levels = coefforder)) %>%
-  arrange(variable)
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable)
 simplep <- glance(mod_simple)$p.value
 simpler2 <- glance(mod_simple)$r.squared
 
-res_simple %>% kable(digits = 3)
+res_simple %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3)
 ```
 
 Again, the absolute value of the partial regression coefficient for the window-based Shannon measure is larger than the landscape-based version and habitat amount (as well as the interaction between the landscape based version and habitat amount). The model is `r ifelse(simplep < 0.05, "significant", "not significant")` (`r ifelse(simplep < 0.0001, "p < 0.001", paste0("p = ", round(p, 3)))`) and explains `r round(simpler2*100, 2)`% of the variance in jay abundance. 
@@ -275,27 +304,25 @@ Now to get the model averaged and variable importance estimates. We are using `d
 
 ```{r mmi_model}
 mod_mmi <- dredge(mod_global, beta = "none") %>% 
-  model.avg(subset = cumsum(weight) <= .95)
+  model.avg(subset = cumsum(weight) <= 0.95)
 
 # mmi averaged estimates
 res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
   left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
-  mutate(variable = factor(variable, levels = coefforder)) %>%
-  arrange(variable)
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable)
 
-res_mmi %>% kable(digits = 3, caption = "Results of model averaging")
+res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3, caption = "Results of model averaging")
 ```
 
 Window-based Shannon measure again coming out as more important than the landscape-based version using both the model averaged partial regression coefficients and the sum of Akaike weights (importance in the above table). 
 
 ## Plots and summary of main results
 
-I might want to do a plot that shows each of the explanatory variables (or at least the jay abundance, MW Shannon and LS Shannon). 
-
 The window-based Shannon measure was included in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)`, whereas the landscape-based Shannon measure was not (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and constant significance in all three modelling approaches (Figure xx). 
 
-```{r results_out, fig.width=10}
+```{r results_out, fig.height = 8}
 # This function lets us calculate the coefficient estimate and 95% CI for one
 # variable at a particular value of the other variable in an interaction
 calc_estci <- function(mod, variable1, variable2, value) {
@@ -326,7 +353,7 @@ figure1_df <- tibble(mod = "mod_simple", variable1 = "lsshannon",
   filter(variable != "(Intercept)") %>%
   select(variable, coef, `2.5 %`, `97.5 %`) %>%
   filter(!str_detect(variable, "habitat:")) %>%
-  mutate(variable = factor(variable, levels = coefforder_noint, labels = coefflabel)) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   na.omit
 
 pd <- position_dodge(1)
@@ -339,7 +366,7 @@ res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) +
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
   xlab("")
 
-save_plot("figures/results_figure.png", res_figure, 
+save_plot("figures/jay_results_figure.png", res_figure, 
           base_width = 10, base_aspect_ratio = 1.3)
 res_figure
 ```

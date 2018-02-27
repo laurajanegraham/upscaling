@@ -8,8 +8,11 @@ bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE)
 knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(fig.width = 12, fig.height = 12)
+library(MASS)
 library(winmoveR)
 library(raster)
 library(rgdal)
@@ -17,11 +20,30 @@ library(rgeos)
 library(ggmap)
 library(cowplot)
 library(sf)
+library(knitr)
+library(GGally)
+library(e1071)
+library(broom)
+library(MuMIn)
+library(stringr)
+library(DHARMa)
 library(tidyverse)
 
-varorder <- c("sprich", "winvar2000", "elevvar", "bio1", "bio12", "bio15")
-coefforder <- c("winvar2000", "elevvar", "bio1", "bio12", "bio15")
-coefflabels <- c("MW Elevation (2km)", "LS Elevation", "Temperature", "Precipitation", "Precipitation\nseasonality")
+varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
+
+varlabel <- c("Species richness", "MW Elevation (2km)", "LS Elevation", "Mean Elevation", "Temperature", "Precipitation", "Precip. seasonality")
+
+coefforder_int <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
+
+coefflabel_int <- c("(Intercept)", "MW elevation (2km)", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation seasonality", "Temperature (quadratic)", "Precipitation (quadratic)")
+
+coefforder <- c("winvar2000", "winvar2000_low", "winvar2000_high", "elevvar", "elevvar_low", "elevvar_high", "elevmean", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
+
+coefflabel <- c("MW Elevation\n(2km)", "MW Elevation\n(low elevation)", "MW Elevation\n(high elevation)", "LS Elevation", "LS Elevation\n(low elevation)", "LS Elevation\n(high elevation)", "Mean Elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
+
+modorder <- c("mod_global", "mod_simple", "mod_mmi")
+
+modlabels <- c("Global model", "Parsimonious model", "MMI average")
 ```
 
 # Case study 2: Forest 
@@ -91,8 +113,11 @@ rasters.mosaicargs$overwrite <- TRUE
 elev_100 <- do.call(mosaic, rasters.mosaicargs)
 
 # create the grid level elevation variance
-elev_grid <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = var,
-                       filename='../DATA/temp_raster/elev_grid.tif', overwrite=TRUE)
+elev_var <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = var,
+                       filename='../DATA/temp_raster/elev_var.tif', overwrite=TRUE)
+
+elev_mean <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = mean,
+                       filename='../DATA/temp_raster/elev_mean.tif', overwrite=TRUE)
 
 # upscale the eu elevation data using the moving window approach
 eu_grid$win_var_500 <- winmove_upscale(eu_grid, elev_100, 500, "rectangle", "var", na.rm=TRUE)$V1
@@ -104,10 +129,10 @@ win_var_500 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_500, f
 win_var_1000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
 win_var_2000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
 
-var_list <- lapply(list(forests_r, win_var_500, win_var_1000, win_var_2000, elev_grid, wc_bio_eu),
+var_list <- lapply(list(forests_r, win_var_500, win_var_1000, win_var_2000, elev_var, elev_mean, wc_bio_eu),
                    function(x) crop(x, elev_grid))
 var_stack <- stack(var_list)
-names(var_stack)[1:5] <- c("sprich", "winvar500", "winvar1000", "winvar2000", "elevvar")
+names(var_stack) <- c("sprich", "winvar500", "winvar1000", "winvar2000", "elevvar", "elevmean", paste0("bio", 1:19))
 writeRaster(var_stack, filename="results/forests_covariates.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
 forests_df <- as.data.frame(var_stack, xy = TRUE) %>% na.omit
 save(forests_df, file="results/forests_covariates.Rda")
@@ -117,13 +142,13 @@ save(forests_df, file="results/forests_covariates.Rda")
 
 What do the variables look like spatially?
 
-```{r spatial_plot, fig.width = 12}
+```{r spatial_plot, fig.height = 8}
 load("results/forests_covariates.Rda")
 
 forests_narrow <- mutate_at(forests_df, .vars = vars(-sprich), .funs = funs(scale)) %>%
   gather(variable, value, -x, -y) %>%
   filter(variable %in% coefforder) %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabels))
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
 sp_plot <- ggplot(forests_df, aes(x = x, y = y, fill = sprich)) + 
   geom_raster() + coord_equal() + 
@@ -136,7 +161,11 @@ cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) +
   scale_fill_viridis_c() + 
   xlab("") + ylab("") + theme(axis.text = element_blank())
 
-plot_grid(sp_plot, cov_plot)
+spatial_plot <- plot_grid(sp_plot, cov_plot)
+
+save_plot("figures/forests_spatial_plot.png", spatial_plot, base_width = 10, base_aspect_ratio = 1:3)
+
+spatial_plot
 ```
 
 what are the minimum and maximum values? 
@@ -147,7 +176,7 @@ select(forests_df, varorder) %>%
   gather(variable, value) %>% 
   separate(variable, into = c("variable", "minmax"), sep="_") %>%
   spread(minmax, value) %>% select(variable, min, max) %>%
-  mutate(variable = factor(variable, levels = varorder)) %>%
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel)) %>%
   arrange(variable) %>%
   kable(digits = 3)
 ```
@@ -158,29 +187,36 @@ How are the variables distributed?
 forests_narrow <- gather(forests_df, variable, value) %>% 
   # order variables by response, interested, covariate
   filter(variable %in% varorder) %>%
-  mutate(variable = factor(variable, levels = varorder))
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
 ggplot(forests_narrow, aes(x = value)) + 
   geom_histogram(bins = 30) + 
   facet_wrap(~variable, scales = "free_x")
 ```
 
-Species richness ideal for Poisson distribution, right skew to MW Elevation and LS elevation, as well as the precipitation variables. 
+Species richness ideal for Poisson distribution, right skew to MW Elevation and LS elevation, Mean elevation, as well as the precipitation variables. 
 
 And where are the correlations?
 
 ```{r pairs}
-ggpairs(forests_df %>% select(varorder))
+ggpairs(
+  forests_df %>% select(varorder), 
+  upper = list(
+    continuous = wrap('cor', method = "spearman")
+  ),
+  columnLabels = varlabel
+)
 ```
 
-Not so great. WB Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). 
+Not so great. WB Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). Our expectation that variation in elevation would be important is supported here by the fact that the species richness correlation with mean elevation is lower. 
 
-Note that I chose 2 km because it made sense, but when doing this with other window sizes, the correlation was lower. Perhaps I need to try larger window sizes (and look up a biologically meaningful reason).
+Note that I chose 2 km because it made sense, but when doing this with other window sizes, there was not much difference between the correlation values. I wonder about using a larger window size here. Need to look up some biological reasoning behind the scale. 
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
 c.winvar2000 <- optimise(skew.score, c(0, 20), x = forests_df$winvar2000)$minimum
 c.elevvar <- optimise(skew.score, c(0, 20), x = forests_df$elevvar)$minimum
+c.elevmean <- optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum
 c.bio12 <- optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum
 c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
 
@@ -188,11 +224,12 @@ c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
 forests_df_t <- select(forests_df, varorder) %>% 
   mutate(winvar2000 = log(winvar2000 + c.winvar2000),
          elevvar = log(elevvar + c.elevvar),
+         elevmean = log(elevmean + c.elevmean),
          bio12 = log(bio12 + c.bio12),
          bio15 = log(bio15 + c.bio15))
 
 forests_narrow_t <- gather(forests_df_t, variable, value) %>% 
-  mutate(variable = factor(variable, varorder))
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
 ggplot(forests_narrow_t, aes(x = value)) + 
   geom_histogram(bins = 30) + 
@@ -211,7 +248,129 @@ forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scal
 
 ### Global model
 
-```{r}
-mod_global <- glm(sprich ~ winvar2000 * elevvar * bio1 * bio12 * bio15, family = "poisson", data = forests_df_t, na.action = na.fail)
+We are including the quadratic term for temperature (bio1) and precipitation (bio12), due to the shape of the relationship between these variables (based on some of the residual diagnostics
+)
+```{r global_model}
+mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2000 + elevmean:elevvar + bio1 + I(bio1^2) + bio12 + I(bio12^2) + bio15, data = forests_df_t, na.action = na.fail)
+
+res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable) 
+
+globalr2 <- round((1 - (mod_global$deviance / mod_global$null.deviance))*100, 2)
+
+res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
+So this is weird. Despite the correlation being super low, winvar2000 is the most important variable in the regression. Interestingly there is a negative effect of local-scale (2km) variation in elevation (WB Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
+
+This model explains `r globalr2`% of the deviance in tree species richness. This was calculated using D-squared [@Guisan2000a]. 
+
+Check the model specification using the DHARMa package [@Hartig2017]. 
+
+```{r global_validation, fig.height = 8}
+simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
+plotSimulatedResiduals(simulationOutput)
+plotResiduals(forests_df_t$winvar2000, simulationOutput$scaledResiduals, xlab = "MW elevation (2km)")
+plotResiduals(forests_df_t$elevvar, simulationOutput$scaledResiduals, xlab = "LS elevation")
+plotResiduals(forests_df_t$elevmean, simulationOutput$scaledResiduals, xlab = "Mean elevation")
+plotResiduals(forests_df_t$bio1, simulationOutput$scaledResiduals, xlab = "Temperature")
+plotResiduals(forests_df_t$bio12, simulationOutput$scaledResiduals, xlab = "Precipitation")
+plotResiduals(forests_df_t$bio15, simulationOutput$scaledResiduals, xlab = "Precipitation seasonality")
+```
+
+Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found horrible patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms. It's still not ideal, but it's much better now. The range for this model is also off (2 - 50, instead of 1 - 74). 
+
+### Parsimonious model
+
+This model is determined using stepwise selection. 
+
+```{r simple_model, message = TRUE}
+mod_simple <- step(mod_global)
+
+res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable)
+simplep <- glance(mod_simple)$p.value
+simpler2 <- glance(mod_simple)$r.squared
+
+res_simple %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+```
+
+Full model retained. 
+
+### Model average in MMI framework
+
+Now to get the model averaged and variable importance estimates. We are using `dredge` to get the full list of models, then model.avg to get the estimates for the 95% confidence set. 
+
+```{r mmi_model}
+mod_mmi <- dredge(mod_global, beta = "none") %>% 
+  model.avg(subset = cumsum(weight) <= 0.95)
+
+# mmi averaged estimates
+res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
+  left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
+  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  arrange(fvariable)
+
+res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3, caption = "Results of model averaging")
+```
+
+## Plots and summary of main results
+
+The window-based elevation measure was included in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winvar2000") %>% select(importance) %>% round(2)`, as was the landscape elevation measure (summed Akaike weight = `r res_mmi %>% filter(variable == "elevvar") %>% select(importance) %>% round(2)`). MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, WB elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured (I wonder why this is??). The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong, and was not present in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "elevmean:elevvar") %>% select(importance) %>% round(2)`)
+
+```{r results_out, fig.height = 8}
+# This function lets us calculate the coefficient estimate and 95% CI for one
+# variable at a particular value of the other variable in an interaction
+calc_estci <- function(mod, variable1, variable2, value) {
+  mod <- get(mod)
+  slope <- coef(mod)[variable1]
+  # catch it so either order will work
+  int_slope <- coef(mod)[paste0(variable1, ":", variable2)]
+  if(is.na(int_slope)) {
+    int_slope <- coef(mod)[paste0(variable2, ":", variable1)]
+  }
+  var1 <- vcov(mod)[variable1, variable1]
+  var2 <- vcov(mod)[variable2, variable2]
+  cov_int <- vcov(mod)[variable1, variable2]
+  UCI <- (slope + int_slope * value) + (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
+  LCI <- (slope + int_slope * value) - (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
+  y <- (slope + int_slope * value)
+  return(tibble(coef = y, `2.5 %` = LCI, `97.5 %` = UCI))
+}
+
+# The first line creates a dataframe of the variables to calculate interaction for
+figure1_df <- tibble(mod = "mod_simple", 
+                     variable1 = c(rep("winvar2000", 2), rep("elevvar", 2)),
+                     variable2 = "elevmean", value = c(-1, 1, -1, 1)) %>%
+  bind_cols(pmap_df(., calc_estci)) %>%
+  inner_join(tibble(value = c(-1, 1), type = c("_low", "_high"))) %>%
+  mutate(variable = paste0(variable1, type)) %>%
+  dplyr::select(variable, coef, `2.5 %`, `97.5 %`) %>% 
+  bind_rows(res_simple) %>%
+  filter(variable != "(Intercept)") %>%
+  dplyr::select(variable, coef, `2.5 %`, `97.5 %`) %>%
+  filter(!str_detect(variable, "elevmean:")) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  na.omit
+
+pd <- position_dodge(1)
+
+res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) + 
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`), colour="black", width=0.2, position=pd) +
+  geom_point(position = pd) +
+  scale_color_viridis_d(name = "") +
+  geom_hline(yintercept = 0) + 
+  ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
+  xlab("")
+
+save_plot("figures/forests_results_figure.png", res_figure, 
+          base_width = 14, base_aspect_ratio = 1.3)
+print(res_figure)
+```
+
+## References
