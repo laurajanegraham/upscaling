@@ -1,0 +1,29 @@
+---
+title: 'Upscaling: Simulations'
+author: "Laura Graham"
+date: "5 March 2018"
+output: 
+  html_document:
+    toc: true
+    keep_md: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Simulation One: categorical variables
+
+- examples
+
+### Simulated landscapes
+### Use winmover function
+### Results (see Macro 2017 poster)
+
+## Simulation Two: continuous variables
+
+- examples
+
+### Simulated landscapes
+### Use winmover function
+### Results (see Macro 2017 poster)
