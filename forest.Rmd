@@ -158,9 +158,7 @@ cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) +
   scale_fill_viridis_c() + 
   xlab("") + ylab("") + theme(axis.text = element_blank())
 
-spatial_plot <- plot_grid(sp_plot, cov_plot)
-
-save_plot("figures/forests_spatial_plot.png", spatial_plot, base_width = 10, base_aspect_ratio = 1:3)
+spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"))
 
 spatial_plot
 ```
@@ -320,7 +318,7 @@ res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3, cap
 
 The window-based elevation measure was included in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winvar2000") %>% select(importance) %>% round(2)`, as was the landscape elevation measure (summed Akaike weight = `r res_mmi %>% filter(variable == "elevvar") %>% select(importance) %>% round(2)`). MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, WB elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured (I wonder why this is??). The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong, and was not present in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "elevmean:elevvar") %>% select(importance) %>% round(2)`)
 
-```{r results_out, fig.height = 8}
+```{r results_out, fig.width = 15, fig.height = 8}
 # This function lets us calculate the coefficient estimate and 95% CI for one
 # variable at a particular value of the other variable in an interaction
 calc_estci <- function(mod, variable1, variable2, value) {
@@ -365,9 +363,11 @@ res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) +
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
   xlab("")
 
-save_plot("figures/forests_results_figure.png", res_figure, 
-          base_width = 16, base_aspect_ratio = 1.3)
-res_figure
+print(res_figure)
+
+# full figure for paper
+box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
+save_plot("figures/forests_figure.png", box_figure, base_width = 15, base_height = 9.375)
 ```
 
 # References
