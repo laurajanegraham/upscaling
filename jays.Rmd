@@ -39,22 +39,22 @@ varlabel <- c("Abundance (1990 Atlas)", "Abundance (2010 Atlas)", "MW Shannon", 
 # for initial tables from models
 coefforder_int <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
                "habitat:winshannon", "habitat:lsshannon",
-               "urban", "bio1")
+               "urban", "bio1", "I(bio1^2)")
 
 coefflabel_int <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
                     "Forest % : MW Shannon", "Forest % : LS Shannon", 
-                    "Urban %", "Temperature")
+                    "Urban %", "Temperature", "Temperature (quadratic)")
 
 
 # for paper figures
 coefforder <- c("winshannon", "winshannon_high", "winshannon_low", 
                       "lsshannon", "lsshannon_high", "lsshannon_low"
-                      ,"habitat", "urban", "bio1")
+                      ,"habitat", "urban", "bio1", "I(bio1^2)")
 
 coefflabel <- c("MW Shannon\n(mean forest %)", "MW Shannon\n(high forest %)", 
                 "MW Shannon\n(low forest %)", "LS Shannon\n(mean forest %)", 
                 "LS Shannon\n(high forest %)", "LS Shannon\n(low forest %)",
-                "Forest %", "Urban %", "Temperature")
+                "Forest %", "Urban %", "Temperature", "Temperature (quadratic)")
                 
 
 modorder <- c("mod_global", "mod_simple", "mod_mmi")
@@ -125,11 +125,14 @@ save(jay_sp, file="results/jays_covariates.Rda")
 
 ## Exploration and transformation
 
+We need to first remove cells with 0 abundance - these cause issues with the model fit and we are only really interested in predicting abundance presuming the species is present. Why are zeroes more complicated? Potential discussion point... 
+
 What do the variables look like spatially?
 
 ```{r spatial_plot, fig.height = 8}
 load("results/jays_covariates.Rda")
-
+removed <- filter(jay_sp, index10 == 0)
+jay_sp <- filter(jay_sp, index10 != 0)
 jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -index90, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry)
@@ -137,7 +140,7 @@ jay_narrow <- jay_sp %>%
 jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
-  scale_fill_viridis_c(name = "Jay abundance")
+  scale_fill_viridis_c(name = "Jay abundance", option = "magma")
 
 covs <- jay_narrow %>% 
   filter(variable %in% varorder[-(1:2)]) %>% 
@@ -148,8 +151,8 @@ cov_plot <- ggplot(covs) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
   scale_fill_viridis_c() + facet_wrap(~variable)
   
-spatial_plot <- plot_grid(jay_plot, cov_plot)
-save_plot("figures/jay_spatial_plot.png", spatial_plot, base_width = 10, base_aspect_ratio = 1:3)
+spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"))
+
 spatial_plot
 ```
 
@@ -193,18 +196,19 @@ ggpairs(jay_df, columnLabels = varlabel)
 
 Good sign to start! Strongest correlate of both indices is temperature followed by the window-based Shannon measure. After that it's urban percentage, followed by the landscape-based Shannon measure, followed by percentage cover of habitat. Interestingly, although both Shannon measures correlate with the amount of habitat, the window-based measure is least correlated with this (still very high). The `r cor(jay_df$winshannon, jay_df$lsshannon)` between the two Shannon measures means we will have issues with Type II errors when we include both - need to remember this. One point about the 'high' (not really high, but relative to other predictors) correlation between urban percentage and jay abundance: this is potentially an observation thing, but also jays are becoming more associated with urban habitats [parks, cemetaries etc, see @Holden2006], so it may be a real effect. Anyway, it's worth including. 
 
-Based on distributions (and some initial modeling not shown) need to transform the temperature, habitat and urban percentage variables:
+Based on distributions (and some initial modeling not shown) need to transform the temperature, habitat and urban percentage variables. Additionally, because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 0 and 1 in data [@Warton2011]:
 
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
 c.habitat <- optimise(skew.score, c(0, 20), x = jay_df$habitat)$minimum
 c.urban <- optimise(skew.score, c(0, 20), x = jay_df$urban)$minimum
-
+x <- min(jay_df$index10[jay_df$index10 > 0])
 jay_df_t <- mutate(jay_df, 
+                   index10_logit = log((index10 + x)/(1 - index10 + x)),
                    habitat = log(habitat + c.habitat),
-                   urban = log(urban + c.urban), # zeros in the data
-                   bio1 = bio1^2)
+                   urban = log(urban + c.urban),
+                   bio1 = bio1^3)
 
 jay_narrow_t <- gather(jay_df_t, variable, value) %>% 
   mutate(variable = factor(variable, 
@@ -216,11 +220,15 @@ ggplot(jay_narrow_t, aes(x = value)) +
 
 ```
 
+The abundance score for some cells was equal to 0, so the smallest non-zero percentage response (`r round(x, 2)`) was added to the logit function.
+
 Better, stick with this for now. It's fine because we don't need to interpret these coefficients. 
 
 Now scale the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
+
 ```{r scale_data}
-jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index90, -index10), .funs = funs(scale))
+scale_this <- function(x) as.vector(scale(x))
+jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index90, -index10), .funs = funs(scale_this))
 ```
 
 # Models 
@@ -233,12 +241,17 @@ This is the model which contains all predictors (window- and landscape-based Sha
 
 I'm not currently sure about interactions... I think it is useful to include interactions between habitat amount and the two Shannon measures, but my worry here is that the main effect then becomes less interpretable [this was one of my concerns with @Smith2011c, although I think they dealt with it reasonably well]. 
 
+<!---
 I need to properly look into the error structure for the models, because it is proportion data and therefore bounded at 0, 1. For now am incorrectly using normal distribution see [Warton and Hui 2011](http://onlinelibrary.wiley.com/doi/10.1890/10-0340.1/full) for discussion of analysis of proportion data. Normal distribution can be problematic with ratio data unless numerator variance >> denominator variance. In our case, the denominator is always the same, so it should be fine to model with a normal distribution? My main concern is it looks much more like a Poisson distribution (or zero-inflated for 1990 index).
 
 Have decided on binomial regression. The model fit seems much better (in terms of no departures from the assumptions).  
+DELETE WHEN HAPPY TO
+--->
+
+Following @Warton2011, I have logit transformed the data (with the smallest non-zero value added to numerator and denominator to account for 0 and 1 in the data). The data will then be modelled using linear regression. This is because the proportions are not strictly binomial and therefore using a binomial error structure does not make sense. 
 
 ```{r global_model}
-mod_global <- glm(index10 ~ habitat + winshannon + lsshannon + urban + bio1 + habitat:lsshannon + habitat:winshannon, family = "binomial", data = jay_df_t, na.action = na.fail)
+mod_global <- lm(index10_logit ~ habitat + winshannon + lsshannon + urban + bio1 + habitat:lsshannon + habitat:winshannon, data = jay_df_t, na.action = na.fail)
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
@@ -246,7 +259,7 @@ res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef")
   arrange(fvariable) 
 
 # check this calculation of R2
-globalr2 = 1 - mod_global$deviance / mod_global$null.deviance
+globalr2 = glance(mod_global)$r.square
 
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
@@ -258,22 +271,26 @@ The model explains `r round(globalr2*100, 2)`% of the variance in jay abundance.
 Need to check how terrible this model is:
 
 ```{r global_validation, fig.height = 8}
-simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
-plotSimulatedResiduals(simulationOutput)
-plotResiduals(jay_df_t$winshannon, simulationOutput$scaledResiduals, xlab = "MW Shannon")
-plotResiduals(jay_df_t$lsshannon, simulationOutput$scaledResiduals, xlab = "LS Shannon")
-plotResiduals(jay_df_t$habitat, simulationOutput$scaledResiduals, xlab = "Forest %")
-plotResiduals(jay_df_t$urban, simulationOutput$scaledResiduals, xlab = "Urban %")
-plotResiduals(jay_df_t$bio1, simulationOutput$scaledResiduals, xlab = "Temperature")
+jay_df_t$resids <- mod_global$residuals
+jay_df_t$fitted <- mod_global$fitted.values
 
-testOverdispersion(simulationOutput)
-testUniformity(simulationOutput)
-xy <- jay_sp %>% st_centroid %>% st_coordinates
-testSpatialAutocorrelation(simulationOutput, x = xy[,1], y = xy[,2])
+ggplot(jay_df_t, aes(x = fitted, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0)
+ggplot(jay_df_t, aes(x = winshannon, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("MW Shannon")
+ggplot(jay_df_t, aes(x = lsshannon, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("LS Shannon")
+ggplot(jay_df_t, aes(x = habitat, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Forest %")
+ggplot(jay_df_t, aes(x = urban, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Urban %")
+ggplot(jay_df_t, aes(x = bio1, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Temperature")
+
+fitted <- exp(jay_df_t$fitted + x)/(1+exp(jay_df_t$fitted + x))
 ```
 
-
-Binomial model looks a lot better than the normal one did, although there are still no fitted values higher than `r round(max(mod_global$fitted.values), 2)`. Overall it seems like it's underpredicting high values and overpredicting low. There is some spatial autocorrelation in the residuals. 
+There is still some patterning in the residuals, but overall a reasonable model fit. The lowest fitted value is `r round(min(fitted), 2)` and the highest is `r round(max(fitted), 2)`. Much better conformity to assumptions and range of predicted values than either the normal or binomial versions. 
 
 ## Parsimonious model
 
@@ -292,21 +309,31 @@ simpler2 <- glance(mod_simple)$r.squared
 res_simple %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3)
 ```
 
-This model kicks out LS Shannon entirely. The MW Shannon is no longer significant (but still in the model). 
+This model kicks out the interaction between Forest % and MW Shannon. Conclusions remain the same. This model explains `r round(simpler2*100, 2)`% of the variance. 
 
-How bad is this one? 
+Validation of this model: 
 
 ```{r simple_validation}
-simulationOutput <- simulateResiduals(fittedModel = mod_simple, n = 250)
-plotSimulatedResiduals(simulationOutput)
-plotResiduals(jay_df_t$winshannon, simulationOutput$scaledResiduals, xlab = "MW Shannon")
-plotResiduals(jay_df_t$lsshannon, simulationOutput$scaledResiduals, xlab = "LS Shannon")
-plotResiduals(jay_df_t$habitat, simulationOutput$scaledResiduals, xlab = "Forest %")
-plotResiduals(jay_df_t$urban, simulationOutput$scaledResiduals, xlab = "Urban %")
-plotResiduals(jay_df_t$tavg, simulationOutput$scaledResiduals, xlab = "Temperature")
+jay_df_t$resids <- mod_simple$residuals
+jay_df_t$fitted <- mod_simple$fitted.values
+
+ggplot(jay_df_t, aes(x = fitted, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0)
+ggplot(jay_df_t, aes(x = winshannon, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("MW Shannon")
+ggplot(jay_df_t, aes(x = lsshannon, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("LS Shannon")
+ggplot(jay_df_t, aes(x = habitat, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Forest %")
+ggplot(jay_df_t, aes(x = urban, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Urban %")
+ggplot(jay_df_t, aes(x = bio1, y = resids)) + 
+  geom_point() + geom_hline(yintercept = 0) + xlab("Temperature")
+
+fitted <- exp(jay_df_t$fitted + x)/(1+exp(jay_df_t$fitted + x))
 ```
 
-This looks worse than the global model...
+Residuals are better again. Lowest fitted value is `r round(min(fitted), 2)` and the highest is `r round(max(fitted), 2)`.
 
 ## Model average in MMI framework
 
@@ -323,16 +350,16 @@ res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
   arrange(fvariable)
 
-res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 3, caption = "Results of model averaging")
+res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 2, caption = "Results of model averaging")
 ```
 
-Window-based Shannon measure again coming out as more important than the landscape-based version using both the model averaged partial regression coefficients and the sum of Akaike weights (importance in the above table). MW Shannon still not significant, but has much smaller confidence interval than LS Shannon. 
+Window-based Shannon measure again coming out as more important than the landscape-based version using both the model averaged partial regression coefficients and the sum of Akaike weights (importance in the above table). 
 
 # Plots and summary of main results
 
-The window-based Shannon measure was included in more supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)`than the landscape-based Shannon measure (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and smaller confidence intervals in the global and mmi modelling approaches. LS Shannon was not present in the parsimonious modelling approach. Results for the global model are shown. 
+The window-based Shannon measure was included in more supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)` than the landscape-based Shannon measure (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and smaller confidence intervals in the global and mmi modelling approaches. LS Shannon was not present in the parsimonious modelling approach. Results for the global model are shown. 
 
-```{r results_out, fig.height = 8}
+```{r results_out, fig_width = 14, fig.height = 8}
 # This function lets us calculate the coefficient estimate and 95% CI for one
 # variable at a particular value of the other variable in an interaction
 calc_estci <- function(mod_name, variable1, variable2, value) {
@@ -382,11 +409,11 @@ res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) +
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
   xlab("")
 
-save_plot("figures/jay_results_figure_binomialmodel.png", res_figure, 
-          base_width = 10, base_aspect_ratio = 1.3)
 res_figure
-```
 
-So using the binomial model is correctly specified, but habitat is no longer important (well, it's important in terms of variable importance, but the habitat variables are no longer significant). 
+# full figure for paper
+box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
+save_plot("figures/jay_figure.png", box_figure, base_width = 12, base_height = 9.375)
+```
 
 # References
