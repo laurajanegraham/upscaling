@@ -31,14 +31,15 @@ library(tidyverse)
 # for exploratory plotting
 varorder <- c("index90", "index10", 
                   "winshannon", "lsshannon", 
-                  "habitat", "urban", "tavg")
+                  "habitat", "urban", "bio1")
 
 varlabel <- c("Abundance (1990 Atlas)", "Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
               "Forest %", "Urban %", "Temperature")
+
 # for initial tables from models
 coefforder_int <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
                "habitat:winshannon", "habitat:lsshannon",
-               "urban", "tavg")
+               "urban", "bio1")
 
 coefflabel_int <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
                     "Forest % : MW Shannon", "Forest % : LS Shannon", 
@@ -48,10 +49,11 @@ coefflabel_int <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %",
 # for paper figures
 coefforder <- c("winshannon", "winshannon_high", "winshannon_low", 
                       "lsshannon", "lsshannon_high", "lsshannon_low"
-                      ,"habitat", "urban", "tavg"
-                      )
-coefflabel <- c("MW Shannon\n(mean forest %)", "MW Shannon\n(high forest %)", "MW Shannon\n(low forest %)", 
-                "LS Shannon\n(mean forest %)", "LS Shannon\n(high forest %)", "LS Shannon\n(low forest %)",
+                      ,"habitat", "urban", "bio1")
+
+coefflabel <- c("MW Shannon\n(mean forest %)", "MW Shannon\n(high forest %)", 
+                "MW Shannon\n(low forest %)", "LS Shannon\n(mean forest %)", 
+                "LS Shannon\n(high forest %)", "LS Shannon\n(low forest %)",
                 "Forest %", "Urban %", "Temperature")
                 
 
@@ -155,7 +157,7 @@ What are the minimum and maximum values?
 
 ```{r maxmin_data}
 jay_df <- jay_sp %>% as.tibble %>% 
-  select(index90, index10, lsshannon, winshannon, habitat, urban, tavg)
+  select(index90, index10, lsshannon, winshannon, habitat, urban, bio1)
 
 summarise_all(jay_df, funs(min, max) ) %>% 
   gather(variable, value) %>% 
@@ -202,7 +204,7 @@ c.urban <- optimise(skew.score, c(0, 20), x = jay_df$urban)$minimum
 jay_df_t <- mutate(jay_df, 
                    habitat = log(habitat + c.habitat),
                    urban = log(urban + c.urban), # zeros in the data
-                   tavg = tavg^2)
+                   bio1 = bio1^2)
 
 jay_narrow_t <- gather(jay_df_t, variable, value) %>% 
   mutate(variable = factor(variable, 
@@ -233,11 +235,10 @@ I'm not currently sure about interactions... I think it is useful to include int
 
 I need to properly look into the error structure for the models, because it is proportion data and therefore bounded at 0, 1. For now am incorrectly using normal distribution see [Warton and Hui 2011](http://onlinelibrary.wiley.com/doi/10.1890/10-0340.1/full) for discussion of analysis of proportion data. Normal distribution can be problematic with ratio data unless numerator variance >> denominator variance. In our case, the denominator is always the same, so it should be fine to model with a normal distribution? My main concern is it looks much more like a Poisson distribution (or zero-inflated for 1990 index).
 
-I'm going to try an attempt at Beta regression [@Cribari-Neto2010], which works for proportions without having the drawback of being uninterpretable on the scale of the variable (like regression with a logit transform would be). Beta regression doesn't work if the data are [0, 1]: needs to be (0, 1). Binomial regression may be more appropriate. MW Shannon is much stronger using this. I just need to work out how . The model fit is also slightly better, so I may want to come back and change this.  
+Have decided on binomial regression. The model fit seems much better (in terms of no departures from the assumptions).  
 
 ```{r global_model}
-# for the binomial model we need to have the response as index and 1-index
-mod_global <- glm(index10 ~ habitat + winshannon + lsshannon + urban + tavg + habitat:lsshannon + habitat:winshannon, family = "binomial", data = jay_df_t, na.action = na.fail)
+mod_global <- glm(index10 ~ habitat + winshannon + lsshannon + urban + bio1 + habitat:lsshannon + habitat:winshannon, family = "binomial", data = jay_df_t, na.action = na.fail)
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
@@ -250,7 +251,7 @@ globalr2 = 1 - mod_global$deviance / mod_global$null.deviance
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
-First model looks to fit my expectation - partial regression coefficient for window-based Shannon is significant and larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
+First model looks to fit my expectation - partial regression coefficient for window-based Shannon is larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
 
 The model explains `r round(globalr2*100, 2)`% of the variance in jay abundance. 
 
@@ -263,11 +264,16 @@ plotResiduals(jay_df_t$winshannon, simulationOutput$scaledResiduals, xlab = "MW 
 plotResiduals(jay_df_t$lsshannon, simulationOutput$scaledResiduals, xlab = "LS Shannon")
 plotResiduals(jay_df_t$habitat, simulationOutput$scaledResiduals, xlab = "Forest %")
 plotResiduals(jay_df_t$urban, simulationOutput$scaledResiduals, xlab = "Urban %")
-plotResiduals(jay_df_t$tavg, simulationOutput$scaledResiduals, xlab = "Temperature")
+plotResiduals(jay_df_t$bio1, simulationOutput$scaledResiduals, xlab = "Temperature")
+
+testOverdispersion(simulationOutput)
+testUniformity(simulationOutput)
+xy <- jay_sp %>% st_centroid %>% st_coordinates
+testSpatialAutocorrelation(simulationOutput, x = xy[,1], y = xy[,2])
 ```
 
 
-Binomial model looks a lot better than the normal one did, although there are still no fitted values higher than `r round(max(mod_global$fitted.values), 2)`. Overall it seems like it's underpredicting high values and overpredicting low. 
+Binomial model looks a lot better than the normal one did, although there are still no fitted values higher than `r round(max(mod_global$fitted.values), 2)`. Overall it seems like it's underpredicting high values and overpredicting low. There is some spatial autocorrelation in the residuals. 
 
 ## Parsimonious model
 
