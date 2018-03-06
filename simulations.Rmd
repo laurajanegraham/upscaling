@@ -6,10 +6,23 @@ output:
   html_document:
     toc: true
     keep_md: true
+bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
+                      fig.width = 12, fig.height = 12)
+
+# load required libraries
+library(winmoveR)
+library(plyr)
+library(NLMR)
+library(R.utils)
+library(tidyverse)
+library(cowplot)
+
+# load required R functions
+sourceDirectory("R")
 ```
 
 ## Simulation One: continuous variables
@@ -17,7 +30,59 @@ knitr::opts_chunk$set(echo = TRUE)
 This simulation will show the use of the moving window-based spatial structure measure for continuous variables which have finer scale variation than the resolution of analysis. This could be, for example, topographic or microclimate variation. 
 
 ### Simulated landscapes
+
+We simulated landscapes using the mid-point displacement method (`nlm_mpd`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `roughness` parameter where a value of zero is a clustered landscape, and a value of one is a rough landscape. We generated landscapes of 65 x 65 cells using roughness = 0, 0.5, 1. 
+
+```{r sim_ls}
+nrows <- ncols <- 65
+roughness <- c(0, 0.5, 1)
+reps <- 1
+
+param_table <- expand.grid(ncol = ncols, nrow = nrows, roughness = roughness, reps = reps)
+
+sim_ls <- apply(param_table, 1, function(x) ls_create(x))
+
+# combine all runs into one dataframe and only take the first replicate of each
+# combination for plotting
+ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
+  filter(reps == 1) %>% 
+  inner_join(group_by(., roughness) %>% summarise(Var = round(var(layer), 2))) %>% 
+  mutate(facet = paste0("Roughness = ", roughness, ", Variance = ", Var))
+
+# plot example landscapes
+ggplot(ls_df, aes(x = x, y = y, fill = layer)) + 
+  geom_raster() + 
+  coord_equal() + 
+  scale_fill_viridis_c(name = "Continuous variable") + 
+  theme(axis.text = element_blank(), axis.title = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank()) + 
+  facet_wrap(~facet, ncol = 1)
+
+```
+
+**Figure 1** Example landscapes of each level of roughness
+
 ### Use winmover function
+
+Now we will use the upscaling function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based measure of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 30 x 30 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
+
+```{r}
+# For each landscape:
+r = 25
+# 1. apply create_torus to pad
+ls_pad <- torus_create(ls, r)
+
+# 2. do winmover
+mw_var <- winmove_nbrhd(ls_pad, radius = r, type = "rectangle", fn = "var")
+
+# 3. crop raster (may require a new function)
+mw_var <- raster::trim(mw_var)
+
+# 4. Calculate mean value (nomove function)
+out <- mean(as.vector(mw_var))
+```
+
+
 ### Results (see Macro 2017 poster)
 
 ## Simulation Two: categorical variables
