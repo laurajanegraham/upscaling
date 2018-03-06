@@ -4,17 +4,17 @@ Laura Graham
 
 
 
-## Simulation One: categorical variables
+## Simulation One: continuous variables
 
-- examples
+This simulation will show the use of the moving window-based spatial structure measure for continuous variables which have finer scale variation than the resolution of analysis. This could be, for example, topographic or microclimate variation. 
 
 ### Simulated landscapes
 ### Use winmover function
 ### Results (see Macro 2017 poster)
 
-## Simulation Two: continuous variables
+## Simulation Two: categorical variables
 
-- examples
+This simulation will show the use of the moving window-based spatial structure measure for categorical variables which have finer scale variation than the resolution of analysis. This is appropriate for more classical landscape ecology questions about habitat structure. 
 
 ### Simulated landscapes
 ### Use winmover function
