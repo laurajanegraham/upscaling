@@ -1,6 +1,5 @@
 ---
 title: "Upscaling: Jay Case Study"
-author: "Laura Graham"
 output: 
   html_document:
     toc: true
@@ -92,8 +91,9 @@ urban <- c(22, 23)
 bng <- as(jay_sp, 'Spatial')
 
 # shannon via moving window
-bng$winshannon <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, type = "rectangle", 
-                                             fn = "diversity", lc_class = forest)
+bng$winshannon <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, 
+                                            type = "rectangle", fn = "diversity", 
+                                            lc_class = forest)
 
 # shannon without moving window
 bng$lsshannon <- nomove_upscale(grid = bng, dat = lcm, fn = "diversity", lc_class = forest)
@@ -411,7 +411,10 @@ res_figure
 
 # full figure for paper
 box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
-save_plot("figures/jay_figure.png", box_figure, base_width = 12, base_height = 9.375)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/jay_figure.tiff", 
+          box_figure, base_width = 12, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_jay_figure.png", 
+          box_figure, base_width = 12, base_height = 9.375)
 ```
 
 # References

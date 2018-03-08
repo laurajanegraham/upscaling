@@ -1,7 +1,5 @@
 ---
 title: 'Upscaling: Simulations'
-author: "Laura Graham"
-date: "5 March 2018"
 output: 
   html_document:
     toc: true
@@ -11,7 +9,7 @@ bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, 
-                      fig.width = 12, fig.height = 12, dpi = 300, dev = "tiff")
+                      fig.width = 12, fig.height = 12)
 
 # load required libraries
 library(winmoveR)
@@ -27,7 +25,7 @@ sourceDirectory("R")
 
 ## Simulation One: continuous variables
 
-This simulation will show the use of the moving window-based spatial structure measure for continuous variables which have finer scale variation than the resolution of analysis. This could be, for example, topographic or microclimate variation. 
+This simulation shows the use of the moving window based spatial structure measure for continuous variables which have finer scale variation than the resolution of analysis. This could be, for example, topographic or microclimate variation. 
 
 ### Simulated landscapes
 
@@ -86,7 +84,10 @@ cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) +
 
 cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, align = 'h', rel_widths = c(2, 1))
 cont_figure
-save_plot("figures/contsim_figure.png", cont_figure, base_height = 10)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/contsim_figure.tiff", 
+          cont_figure, base_width = 12, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figure.png", 
+          cont_figure, base_width = 12, base_height = 9.375)
 ```
 
 **Figure 2** Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
@@ -143,8 +144,14 @@ cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) +
   xlab("Moving window size") + ylab("MW Shannon") 
 
 cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
-
 cat_figure
+
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/catsim_figure.tiff", 
+          cat_figure, base_width = 12, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figure.png", 
+          cat_figure, base_width = 12, base_height = 9.375)
 ```
 
 **Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+
+## References

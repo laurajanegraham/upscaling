@@ -9,7 +9,6 @@
 <meta name="generator" content="pandoc" />
 
 
-<meta name="author" content="Laura Graham" />
 
 
 <title>Upscaling: Jay Case Study</title>
@@ -117,7 +116,6 @@ $(document).ready(function () {
 
 
 <h1 class="title toc-ignore">Upscaling: Jay Case Study</h1>
-<h4 class="author"><em>Laura Graham</em></h4>
 
 </div>
 
@@ -146,7 +144,7 @@ $(document).ready(function () {
 </div>
 <div id="environmental-data" class="section level2">
 <h2>Environmental data</h2>
-<p>The data for which we want to use the upscaling approach on is Land Cover Map 2007 <span class="citation">(Morton et al. 2011)</span>, which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting <span class="citation">(Hougner, Colding, and Söderqvist 2005; Holden and Cleeves 2006)</span>. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale [needs citation] and without the moving window at the 10km scale. As covariates, to avoid confounding variables, we will calculate forest (habitat) cover percentage, urban land cover percentage and average temperature at the 10km scale.</p>
+<p>The data for which we want to use the upscaling approach on is Land Cover Map 2007 <span class="citation">(Morton et al. 2011)</span>, which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting <span class="citation">(Hougner, Colding, and Söderqvist 2005; Holden and Cleeves 2006)</span>. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale [needs citation] and without the moving window at the 10km scale. As covariates, to avoid confounding variables, we will calculate forest (habitat) cover percentage, urban land cover percentage and from Worldclim the following bioclimatic variables at the 10km scale: temperature (bio1), temperature range (bio7), annual preciptation (bio12) and precipitation seasonality (bio15).</p>
 </div>
 <div id="exploration-and-transformation" class="section level2">
 <h2>Exploration and transformation</h2>
@@ -198,21 +196,6 @@ $(document).ready(function () {
 <td align="right">43.000</td>
 <td align="right">109.000</td>
 </tr>
-<tr class="even">
-<td align="left">Temperature range</td>
-<td align="right">158.000</td>
-<td align="right">229.000</td>
-</tr>
-<tr class="odd">
-<td align="left">Precipitation</td>
-<td align="right">538.000</td>
-<td align="right">2041.000</td>
-</tr>
-<tr class="even">
-<td align="left">Precip. seasonality</td>
-<td align="right">7.000</td>
-<td align="right">32.000</td>
-</tr>
 </tbody>
 </table>
 <p>Bit worrying that the maximum value for landscape-Shannon is (slightly) above 1… Need to go back and check, but it generally looks about right otherwise.</p>
@@ -232,7 +215,7 @@ $(document).ready(function () {
 </div>
 <div id="models" class="section level1">
 <h1>Models</h1>
-<p>Using the approch outlined by <span class="citation">(A. C. Smith et al. 2009; A. C. Smith, Fahrig, and Francis 2011)</span> we use three approaches to quantify the relative importance of the window-based Shannon measure over the more traditional landscape level measure (and habitat amount??): we compare the partial regression coefficients from a global model, the parsimonious model, and the model average of all supported models in a multi-model inference framework (MMI)</p>
+<p>Following <span class="citation">A. C. Smith, Fahrig, and Francis (2011)</span> we use three approaches to quantify the relative importance of the window-based Shannon measure over the more traditional landscape level measure (and habitat amount??): we compare the partial regression coefficients from a global model, the parsimonious model, and the model average of all supported models in a multi-model inference framework (MMI)</p>
 <div id="global-model" class="section level2">
 <h2>Global model</h2>
 <p>This is the model which contains all predictors (window- and landscape-based Shannon measure, habitat amount, and the interaction between habitat amount and the two Shannon measures) and the additional covariates (urban cover and average temperature).</p>
@@ -489,9 +472,6 @@ DELETE WHEN HAPPY TO
 </div>
 <div id="ref-Smith2011c">
 <p>Smith, Adam C., Lenore Fahrig, and Charles M. Francis. 2011. “Landscape size affects the relative importance of habitat amount, habitat fragmentation, and matrix quality on forest birds.” <em>Ecography</em> 34 (1): 103–13. doi:<a href="https://doi.org/10.1111/j.1600-0587.2010.06201.x">10.1111/j.1600-0587.2010.06201.x</a>.</p>
-</div>
-<div id="ref-Smith2009a">
-<p>Smith, Adam C., Nicola Koper, Charles M. Francis, and Lenore Fahrig. 2009. “Confronting collinearity: Comparing methods for disentangling the effects of habitat loss and fragmentation.” <em>Landscape Ecology</em> 24 (10): 1271–85. doi:<a href="https://doi.org/10.1007/s10980-009-9383-3">10.1007/s10980-009-9383-3</a>.</p>
 </div>
 <div id="ref-Warton2011">
 <p>Warton, David I, and Francis K C Hui. 2011. “The arcsine is asinine: the analysis of proportions in ecology.” <em>Ecology</em> 92 (1): 3–10. doi:<a href="https://doi.org/10.1890/10-0340.1">10.1890/10-0340.1</a>.</p>

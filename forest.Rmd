@@ -68,11 +68,12 @@ We will use the moving window to upscale the variation in elevation at three sca
 # This section only gets run the first time (or if changed) and the output saved
 # to file. Set eval = FALSE at all other times.
 
-wc_bio <- getData('worldclim', var = "bio", res = 10, path = "../data/worldclim/")
+wc_bio <- getData('worldclim', var = "bio", res = 10, path = "../DATA/worldclim/")
 wc_bio_30 <- aggregate(wc_bio, 3)
 
 # load in the elevation data
-elev <- raster("../DATA/elev/eudem_dem_3035_europe.tif")
+#elev <- raster("../DATA/elev/eudem_dem_3035_europe.tif")
+elev <- raster('../DATA/elev/eudem_100m_aggregated.tif')
 
 # get forest and climate data in same projection as elev and crop worldclim data by the EU forest dataset
 forests <- spTransform(forests, crs(elev))
@@ -88,28 +89,30 @@ forests_r <- rasterize(forests, wc_bio_eu, fun=function(x, ...){ length(unique(n
 # create a grid for the moving window and elevation aggregation to loop through - I want to move this into the package at some point
 eu_grid <- as(forests_r, 'SpatialPolygonsDataFrame')
 
-agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
-  cell <- grid[cell_no,]
-  dat_cell <- crop(dat, cell, filename='../temp_raster/temp_crop.tif', overwrite=TRUE)
-  dat_cell_agg <- aggregate(dat_cell, fact, fun = fn, filename='../temp_raster/temp_agg.tif', overwrite=TRUE)
-  zero_to_na <- function(x) ifelse(x==0, NA, x)
-  dat_cell_na <- calc(dat_cell_agg, zero_to_na, ...)
-}
+# agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
+#   cell <- grid[cell_no,]
+#   dat_cell <- crop(dat, cell, filename='../temp_raster/temp_crop.tif', overwrite=TRUE)
+#   dat_cell_agg <- aggregate(dat_cell, fact, fun = fn, filename='../temp_raster/temp_agg.tif', overwrite=TRUE)
+#   zero_to_na <- function(x) ifelse(x==0, NA, x)
+#   dat_cell_na <- calc(dat_cell_agg, zero_to_na, ...)
+# }
+# 
+# elev_cell_100 <- list()
+# 
+# for(cell_no in 1:length(eu_grid)) {
+#   elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../DATA/temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
+# }
+# 
+# # need to add the arguments to mosaic as attributes of the raster list. 
+# rasters.mosaicargs <- elev_cell_100
+# rasters.mosaicargs$fun <- mean
+# rasters.mosaicargs$filename <- '../DATA/elev/eudem_100m_aggregated.tif'
+# rasters.mosaicargs$overwrite <- TRUE
+# elev_100 <- do.call(mosaic, rasters.mosaicargs)
 
-elev_cell_100 <- list()
+elev_100 <- raster('../DATA/elev/eudem_100m_aggregated.tif')
 
-for(cell_no in 1:length(eu_grid)) {
-  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../DATA/temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
-}
-
-# need to add the arguments to mosaic as attributes of the raster list. 
-rasters.mosaicargs <- elev_cell_100
-rasters.mosaicargs$fun <- mean
-rasters.mosaicargs$filename <- '../DATA/elev/eudem_100m_aggregated.tif'
-rasters.mosaicargs$overwrite <- TRUE
-elev_100 <- do.call(mosaic, rasters.mosaicargs)
-
-# create the grid level elevation variance
+# create the grid level elevation mean and variance
 elev_var <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = var,
                        filename='../DATA/temp_raster/elev_var.tif', overwrite=TRUE)
 
@@ -117,21 +120,26 @@ elev_mean <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = mean,
                        filename='../DATA/temp_raster/elev_mean.tif', overwrite=TRUE)
 
 # upscale the eu elevation data using the moving window approach
-eu_grid$win_var_500 <- winmove_upscale(eu_grid, elev_100, 500, "rectangle", "var", na.rm=TRUE)$V1
-eu_grid$win_var_1000 <- winmove_upscale(eu_grid, elev_100, 1000, "rectangle", "var", na.rm=TRUE)$V1
-eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, "rectangle", "var", na.rm=TRUE)$V1
+# currently only doing a 2000m radius - might need to adjust
+eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, 
+                                        "rectangle", "var")
 
 # stack variables
-win_var_500 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_500, fun = "mean")
-win_var_1000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_1000, fun = "mean")
 win_var_2000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
 
-var_list <- lapply(list(forests_r, win_var_500, win_var_1000, win_var_2000, elev_var, elev_mean, wc_bio_eu),
-                   function(x) crop(x, elev_grid))
+var_list <- lapply(list(forests_r, win_var_2000, 
+                        elev_var, elev_mean, wc_bio_eu), 
+                   function(x) crop(x, elev))
+
 var_stack <- stack(var_list)
-names(var_stack) <- c("sprich", "winvar500", "winvar1000", "winvar2000", "elevvar", "elevmean", paste0("bio", 1:19))
-writeRaster(var_stack, filename="results/forests_covariates.tif", options="INTERLEAVE=BAND", overwrite=TRUE)
+
+names(var_stack) <- c("sprich", "winvar2000", "elevvar", "elevmean", paste0("bio", 1:19))
+
+writeRaster(var_stack, filename="results/forests_covariates.tif", 
+            options="INTERLEAVE=BAND", overwrite=TRUE)
+
 forests_df <- as.data.frame(var_stack, xy = TRUE) %>% na.omit
+
 save(forests_df, file="results/forests_covariates.Rda")
 ```
 
@@ -367,7 +375,10 @@ print(res_figure)
 
 # full figure for paper
 box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
-save_plot("figures/forests_figure.png", box_figure, base_width = 15, base_height = 9.375)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/forest_figure.tiff", 
+          box_figure, base_width = 15, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_forest_figure.png", 
+          box_figure, base_width = 15, base_height = 9.375)
 ```
 
 # References

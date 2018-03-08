@@ -1,5 +1,4 @@
 # Upscaling: Jay Case Study
-Laura Graham  
 
 
 
