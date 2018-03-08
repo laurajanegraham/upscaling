@@ -10,20 +10,75 @@ This simulation shows the use of the moving window based spatial structure measu
 
 We simulated landscapes using the mid-point displacement method (`nlm_mpd`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `roughness` parameter where a value of zero is a clustered landscape, and a value of one is a rough landscape. We generated landscapes of 65 x 65 cells using roughness = 0, 0.5, 1. We scaled each landscape to have a mean of zero, and a variance of one in order to facilitate comparison between landscapes. 
 
+
+```r
+nrows <- ncols <- 65
+roughness <- c(0, 0.5, 1)
+radius <- c(1, 7, 17)
+reps <- 1:100
+
+param_table <- expand.grid(ncol = ncols, nrow = nrows, roughness = roughness, radius = radius, reps = reps)
+
+# simulate 65 x 65 landscapes with mean = 0, variance = 1 and variable roughness
+sim_ls <- apply(param_table, 1, function(x) ls_create(x))
+
+# combine all runs into one dataframe and only take the first replicate of each
+# combination for plotting
+cont_ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
+  filter(reps == 1, radius == 1) %>% 
+  inner_join(group_by(., roughness) %>% summarise(Var = round(var(layer), 2)))
+
+# plot example landscapes
+cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) + 
+  geom_raster() + 
+  coord_equal() + 
+  scale_fill_viridis_c(name = "Continuous variable") + 
+  theme(axis.text = element_blank(), axis.title = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank()) + 
+  facet_wrap(~roughness, ncol = 1) + 
+  theme(strip.background = element_blank(),strip.text.x = element_blank(), legend.position = "none")
+
+cont_ls_plot
+```
+
 ![](simulations_files/figure-html/sim_ls-1.png)<!-- -->
 
 **Figure 1** Example landscapes of each level of roughness
 
 ### Use winmover function
 
+<<<<<<< HEAD
 We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 
+```r
+cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>% 
+  mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
+         roughness = paste0("Roughness = ", roughness))
+```
 
 
 ### Results
 
+
+```r
+cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) + 
+  geom_boxplot() + coord_flip() + 
+  facet_wrap(~roughness, ncol = 1) +
+  xlab("Moving window size") + ylab("MW Variance") 
+
+cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, align = 'h', rel_widths = c(2, 1))
+cont_figure
+```
+
 ![](simulations_files/figure-html/contsim_results-1.png)<!-- -->
+
+```r
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/contsim_figure.tiff", 
+          cont_figure, base_width = 12, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figure.png", 
+          cont_figure, base_width = 12, base_height = 9.375)
+```
 
 **Figure 2** Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
 
@@ -35,6 +90,29 @@ This simulation will show the use of the moving window-based spatial structure m
 
 We will use the simulated landscapes from the previous example, and use the `util_classify` function to classify into equal proportions of three habitat types. This will give us a landscape scale Shannon evenness of 1 for all landscapes (complete evenness). 
 
+
+```r
+cat_ls_df <- ldply(sim_ls, function(x) {
+  ls <- util_classify(x$ls, weighting = rep(1/3, 3))
+  ls_df <- raster::as.data.frame(ls, xy = TRUE)
+  return(data.frame(t(x$params), ls_df))
+}
+) %>% 
+  filter(reps == 1, radius == 1)
+
+# plot example landscapes
+cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) + 
+  geom_raster() + 
+  coord_equal() + 
+  scale_fill_viridis_c() + 
+  theme(axis.text = element_blank(), axis.title = element_blank(), 
+        axis.line = element_blank(), axis.ticks = element_blank()) + 
+  facet_wrap(~roughness, ncol = 1) + 
+  theme(strip.background = element_blank(),strip.text.x = element_blank(), legend.position = "none")
+
+cat_ls_plot
+```
+
 ![](simulations_files/figure-html/cat_ls-1.png)<!-- -->
 
 **Figure 3** Example categorical landscapes of each level of roughness
@@ -44,12 +122,36 @@ We will use the simulated landscapes from the previous example, and use the `uti
 We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based Shannon evenness of the categorical variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 
+```r
+cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 0:2)) %>% 
+  mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
+         roughness = paste0("Roughness = ", roughness))
+```
 
 
 ### Results
 
+
+```r
+cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) + 
+  geom_boxplot() + coord_flip() + 
+  facet_wrap(~roughness, ncol = 1) +
+  xlab("Moving window size") + ylab("MW Shannon") 
+
+cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
+cat_figure
+```
+
 ![](simulations_files/figure-html/catsim_results-1.png)<!-- -->
+
+```r
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/catsim_figure.tiff", 
+          cat_figure, base_width = 12, base_height = 9.375, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figure.png", 
+          cat_figure, base_width = 12, base_height = 9.375)
+```
 
 **Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
 
 ## References
+

@@ -8,7 +8,7 @@ bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, 
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
                       fig.width = 12, fig.height = 12)
 
 # load required libraries
@@ -65,6 +65,7 @@ cont_ls_plot
 
 ### Use winmover function
 
+<<<<<<< HEAD
 We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 ```{r contsim_winmove}
@@ -155,3 +156,4 @@ save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figur
 **Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
 
 ## References
+
