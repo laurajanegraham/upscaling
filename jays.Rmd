@@ -4,6 +4,8 @@ output:
   html_document:
     toc: true
     keep_md: true
+params:
+  plot_font_size: 6
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -15,7 +17,6 @@ library(winmoveR)
 library(raster)
 library(rgdal)
 library(rgeos)
-library(cowplot)
 library(sf)
 library(knitr)
 library(GGally)
@@ -25,6 +26,11 @@ library(MuMIn)
 library(stringr)
 library(DHARMa)
 library(tidyverse)
+library(cowplot)
+
+# set up plotting options
+plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
+                          theme(strip.background = element_blank()))
 
 # set up some options
 # for exploratory plotting
@@ -36,29 +42,13 @@ varlabel <- c("Abundance (1990 Atlas)", "Abundance (2010 Atlas)", "MW Shannon", 
               "Forest %", "Urban %", "Temperature")
 
 # for initial tables from models
-coefforder_int <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
+coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
                "habitat:winshannon", "habitat:lsshannon",
-               "urban", "bio1", "I(bio1^2)")
+               "urban", "bio1")
 
-coefflabel_int <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
+coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
                     "Forest % : MW Shannon", "Forest % : LS Shannon", 
-                    "Urban %", "Temperature", "Temperature (quadratic)")
-
-
-# for paper figures
-coefforder <- c("winshannon", "winshannon_high", "winshannon_low", 
-                      "lsshannon", "lsshannon_high", "lsshannon_low"
-                      ,"habitat", "urban", "bio1", "I(bio1^2)")
-
-coefflabel <- c("MW Shannon\n(mean forest %)", "MW Shannon\n(high forest %)", 
-                "MW Shannon\n(low forest %)", "LS Shannon\n(mean forest %)", 
-                "LS Shannon\n(high forest %)", "LS Shannon\n(low forest %)",
-                "Forest %", "Urban %", "Temperature", "Temperature (quadratic)")
-                
-
-modorder <- c("mod_global", "mod_simple", "mod_mmi")
-
-modlabels <- c("Global model", "Parsimonious model", "MMI average")
+                    "Urban %", "Temperature")
 ```
 
 # Data
@@ -138,7 +128,10 @@ jay_narrow <- jay_sp %>%
 jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
-  scale_fill_viridis_c(name = "Jay abundance", option = "magma")
+  scale_fill_viridis_c(name = "Jay abundance", option = "magma") + 
+  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.title.align = 0.5,
+        legend.key.height=unit(1,"line"), legend.key.width = unit(1.5, "line"))
 
 covs <- jay_narrow %>% 
   filter(variable %in% varorder[-(1:2)]) %>% 
@@ -147,11 +140,22 @@ covs <- jay_narrow %>%
 cov_plot <- ggplot(covs) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
-  scale_fill_viridis_c() + facet_wrap(~variable)
+  scale_fill_viridis_c() + facet_wrap(~variable) + 
+  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.title.align = 0.5,
+        legend.key.height=unit(1,"line"), legend.key.width = unit(2, "line"))
   
-spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"))
-
+plots <- align_plots(jay_plot, cov_plot, align = 'h', axis = 'tb')
+spatial_plot <- plot_grid(plots[[1]], plots[[2]], labels = c("a)", "b)"), 
+                          label_size = 10, rel_widths = c(1, 1.5))
 spatial_plot
+
+# Ecol. Letts. figures: 82mm, 110mm, 173mm
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/jay_data_figure.tiff", 
+          spatial_plot, base_width = 6.81102, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_jay_data_figure.png", 
+          spatial_plot, base_width = 6.81102)
+
 ```
 
 What are the minimum and maximum values? 
@@ -189,10 +193,16 @@ Right skew to habitat percentage, urban percentage and precipitation, and left s
 And where are the correlations?
 
 ```{r pairs}
-ggpairs(jay_df, columnLabels = varlabel)
+ggpairs(
+  forests_df %>% select(varorder), 
+  upper = list(
+    continuous = wrap('cor', method = "spearman")
+  ),
+  columnLabels = varlabel
+)
 ```
 
-Good sign to start! Strongest correlate of both indices is temperature followed by the window-based Shannon measure. After that it's urban percentage, followed by the landscape-based Shannon measure, followed by percentage cover of habitat. Interestingly, although both Shannon measures correlate with the amount of habitat, the window-based measure is least correlated with this (still very high). The `r cor(jay_df$winshannon, jay_df$lsshannon)` between the two Shannon measures means we will have issues with Type II errors when we include both - need to remember this. One point about the 'high' (not really high, but relative to other predictors) correlation between urban percentage and jay abundance: this is potentially an observation thing, but also jays are becoming more associated with urban habitats [parks, cemetaries etc, see @Holden2006], so it may be a real effect. Anyway, it's worth including. 
+Good sign to start! Strongest correlate of both indices is temperature followed by the window-based Shannon measure. After that it's urban percentage, followed by the landscape-based Shannon measure, followed by percentage cover of habitat. Interestingly, although both Shannon measures correlate with the amount of habitat, the window-based measure is least correlated with this (still very high). The `r cor(jay_df$winshannon, jay_df$lsshannon, method = "spearman")` between the two Shannon measures means we will have issues with Type II errors when we include both - need to remember this. One point about the 'high' (not really high, but relative to other predictors) correlation between urban percentage and jay abundance: this is potentially an observation thing, but also jays are becoming more associated with urban habitats [parks, cemetaries etc, see @Holden2006], so it may be a real effect. Anyway, it's worth including. 
 
 Based on distributions (and some initial modeling not shown) need to transform the temperature, habitat and urban percentage variables. Additionally, because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 0 and 1 in data [@Warton2011]:
 
@@ -253,7 +263,7 @@ mod_global <- lm(index10_logit ~ habitat + winshannon + lsshannon + urban + bio1
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable) 
 
 # check this calculation of R2
@@ -299,7 +309,7 @@ mod_simple <- step(mod_global)
 
 res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable)
 simplep <- glance(mod_simple)$p.value
 simpler2 <- glance(mod_simple)$r.squared
@@ -345,7 +355,7 @@ mod_mmi <- dredge(mod_global, beta = "none") %>%
 res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
   left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable)
 
 res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 2, caption = "Results of model averaging")
@@ -357,7 +367,7 @@ Window-based Shannon measure again coming out as more important than the landsca
 
 The window-based Shannon measure was included in more supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)` than the landscape-based Shannon measure (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and smaller confidence intervals in the global and mmi modelling approaches. LS Shannon was not present in the parsimonious modelling approach. Results for the global model are shown. 
 
-```{r results_out, fig_width = 14, fig.height = 8}
+```{r results_out, fig_width = 6.81102}
 # This function lets us calculate the coefficient estimate and 95% CI for one
 # variable at a particular value of the other variable in an interaction
 calc_estci <- function(mod_name, variable1, variable2, value) {
@@ -387,34 +397,28 @@ figure1_df <- tibble(mod = "mod_global",
                      variable1 = c(rep("winshannon", 2), rep("lsshannon", 2)),
                      variable2 = "habitat", value = c(-1, 1, -1, 1)) %>%
   bind_cols(pmap_df(., calc_estci)) %>%
-  inner_join(tibble(value = c(-1, 1), type = c("_low", "_high"))) %>%
-  mutate(variable = paste0(variable1, type)) %>%
-  dplyr::select(variable, coef, `2.5 %`, `97.5 %`) %>% 
-  bind_rows(res_global) %>%
+  inner_join(tibble(value = c(-1, 1), type = c("low", "high"))) %>%
+  select(variable = variable1, type, coef, `2.5 %`, `97.5 %`) %>% 
+  bind_rows(res_global %>% mutate(type = "mean") %>% select(-fvariable)) %>%
   filter(variable != "(Intercept)") %>%
-  select(variable, coef, `2.5 %`, `97.5 %`) %>%
   filter(!str_detect(variable, "habitat:")) %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel),
+         type = factor(type, levels = c("low", "mean", "high"))) %>%
   na.omit
 
-pd <- position_dodge(1)
+pd <- position_dodge(0.5)
 
-res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) + 
-  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`), colour="black", width=0.2, position=pd) +
+jay_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) + 
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`, colour = type), width=0.2, position=pd) +
   geom_point(position = pd) +
-  scale_color_viridis_d(name = "") +
-  geom_hline(yintercept = 0) + 
+  scale_color_manual(values = c("grey", "black", "grey")) +
+  geom_hline(yintercept = 0, linetype = "dotted") + 
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
-  xlab("")
+  xlab("") + theme(legend.position = "none")
 
-res_figure
+jay_figure
 
-# full figure for paper
-box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/jay_figure.tiff", 
-          box_figure, base_width = 12, base_height = 9.375, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_jay_figure.png", 
-          box_figure, base_width = 12, base_height = 9.375)
+save(jay_figure, file = "results/jay_res_figure.Rda")
 ```
 
 # References

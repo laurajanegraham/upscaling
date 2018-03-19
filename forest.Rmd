@@ -5,6 +5,8 @@ output:
   html_document:
     toc: true
     keep_md: true
+params:
+  plot_font_size: 6
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -28,21 +30,18 @@ library(stringr)
 library(DHARMa)
 library(tidyverse)
 
+
+# set up plotting options
+plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
+                          theme(strip.background = element_blank()))
+
 varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
 
 varlabel <- c("Species richness", "MW Elevation (2km)", "LS Elevation", "Mean Elevation", "Temperature", "Precipitation", "Precip. seasonality")
 
-coefforder_int <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
+coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
 
-coefflabel_int <- c("(Intercept)", "MW elevation (2km)", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation seasonality", "Temperature (quadratic)", "Precipitation (quadratic)")
-
-coefforder <- c("winvar2000", "winvar2000_low", "winvar2000_high", "elevvar", "elevvar_low", "elevvar_high", "elevmean", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
-
-coefflabel <- c("MW Elevation\n(2km)", "MW Elevation\n(low elevation)", "MW Elevation\n(high elevation)", "LS Elevation", "LS Elevation\n(low elevation)", "LS Elevation\n(high elevation)", "Mean Elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
-
-modorder <- c("mod_global", "mod_simple", "mod_mmi")
-
-modlabels <- c("Global model", "Parsimonious model", "MMI average")
+coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
 ```
 
 # Data
@@ -158,17 +157,31 @@ forests_narrow <- mutate_at(forests_df, .vars = vars(-sprich), .funs = funs(scal
 sp_plot <- ggplot(forests_df, aes(x = x, y = y, fill = sprich)) + 
   geom_raster() + coord_equal() + 
   scale_fill_viridis_c(name = "Species Richness", option = "magma") + 
-  xlab("") + ylab("") + theme(axis.text = element_blank())
+  xlab("") + ylab("") + 
+  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.title.align = 0.5,
+        legend.key.height=unit(1,"line"), legend.key.width = unit(1.5, "line"))
 
 cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) + 
   geom_raster() + coord_equal() + 
   facet_wrap(~variable) +
-  scale_fill_viridis_c() + 
-  xlab("") + ylab("") + theme(axis.text = element_blank())
+  scale_fill_viridis_c(name = "Covariate value") + 
+  xlab("") + ylab("") + 
+  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+        legend.position = "bottom", legend.title.align = 0.5,
+        legend.key.height=unit(1,"line"), legend.key.width = unit(2, "line"))
 
-spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"))
+plots <- align_plots(sp_plot, cov_plot, align = 'h', axis = 'tb')
+spatial_plot <- plot_grid(plots[[1]], plots[[2]], labels = c("a)", "b)"), 
+                          label_size = 10, rel_widths = c(1, 1.5))
 
 spatial_plot
+
+# Ecol. Letts. figures: 82mm, 110mm, 173mm
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/forest_data_figure.tiff", 
+          spatial_plot, base_width = 6.81102, dpi = 300)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_forest_data_figure.png", 
+          spatial_plot, base_width = 6.81102)
 ```
 
 what are the minimum and maximum values? 
@@ -258,7 +271,7 @@ mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable) 
 
 globalr2 <- round((1 - (mod_global$deviance / mod_global$null.deviance))*100, 2)
@@ -294,7 +307,7 @@ mod_simple <- step(mod_global)
 
 res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable)
 simplep <- glance(mod_simple)$p.value
 simpler2 <- glance(mod_simple)$r.squared
@@ -316,10 +329,10 @@ mod_mmi <- dredge(mod_global, beta = "none") %>%
 res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
   left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
-  mutate(fvariable = factor(variable, levels = coefforder_int, labels = coefflabel_int)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable)
 
-res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3, caption = "Results of model averaging")
+res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 3, caption = "Results of model averaging")
 ```
 
 # Plots and summary of main results
@@ -351,34 +364,28 @@ figure1_df <- tibble(mod = "mod_global",
                      variable1 = c(rep("winvar2000", 2), rep("elevvar", 2)),
                      variable2 = "elevmean", value = c(-1, 1, -1, 1)) %>%
   bind_cols(pmap_df(., calc_estci)) %>%
-  inner_join(tibble(value = c(-1, 1), type = c("_low", "_high"))) %>%
-  mutate(variable = paste0(variable1, type)) %>%
-  dplyr::select(variable, coef, `2.5 %`, `97.5 %`) %>% 
-  bind_rows(res_global) %>%
+  inner_join(tibble(value = c(-1, 1), type = c("low", "high"))) %>%
+  select(variable = variable1, type, coef, `2.5 %`, `97.5 %`) %>% 
+  bind_rows(res_global %>% mutate(type = "mean") %>% select(-fvariable)) %>%
   filter(variable != "(Intercept)") %>%
-  dplyr::select(variable, coef, `2.5 %`, `97.5 %`) %>%
   filter(!str_detect(variable, "elevmean:")) %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel),
+         type = factor(type, levels = c("low", "mean", "high"))) %>%
   na.omit
 
-pd <- position_dodge(1)
+pd <- position_dodge(0.5)
 
-res_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) + 
-  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`), colour="black", width=0.2, position=pd) +
+forest_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) + 
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`, colour = type), width=0.2, position=pd) +
   geom_point(position = pd) +
-  scale_color_viridis_d(name = "") +
-  geom_hline(yintercept = 0) + 
+  scale_color_manual(values = c("grey", "black", "grey")) +
+  geom_hline(yintercept = 0, linetype = "dotted") + 
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
-  xlab("")
+  xlab("") + theme(legend.position = "none")
 
-print(res_figure)
+forest_figure
 
-# full figure for paper
-box_figure <- plot_grid(spatial_plot, res_figure, nrow = 2, labels = c("", "c)"))
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/forest_figure.tiff", 
-          box_figure, base_width = 15, base_height = 9.375, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_forest_figure.png", 
-          box_figure, base_width = 15, base_height = 9.375)
+save(forest_figure, file = "results/forest_res_figure.Rda")
 ```
 
 # References

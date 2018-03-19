@@ -4,6 +4,8 @@ output:
   html_document:
     toc: true
     keep_md: true
+params:
+  plot_font_size: 6
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -18,6 +20,9 @@ library(NLMR)
 library(R.utils)
 library(tidyverse)
 library(cowplot)
+
+plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
+                          theme(strip.background = element_blank()))
 
 # load required R functions
 sourceDirectory("R")
@@ -65,13 +70,12 @@ cont_ls_plot
 
 ### Use winmover function
 
-<<<<<<< HEAD
 We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 ```{r contsim_winmove}
 cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>% 
   mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
-         roughness = paste0("Roughness = ", roughness))
+         roughness = factor(paste0("Roughness = ", roughness)))
 ```
 
 
@@ -79,19 +83,28 @@ cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>%
 
 ```{r contsim_results}
 cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) + 
-  geom_boxplot() + coord_flip() + 
+  geom_boxplot(lwd = 0.1) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
-  xlab("Moving window size") + ylab("MW Variance") 
+  xlab("Moving window size") + ylab("MW Variance")
 
-cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, align = 'h', rel_widths = c(2, 1))
+cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
 cont_figure
+
+# Ecol. Letts. figures: 82mm, 110mm, 173mm
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/contsim_figure.tiff", 
-          cont_figure, base_width = 12, base_height = 9.375, dpi = 300)
+          cont_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figure.png", 
-          cont_figure, base_width = 12, base_height = 9.375)
+          cont_figure, base_width = 4.33071)
 ```
 
 **Figure 2** Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+
+We used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. We focus on the effect size rather than the statistical significance due to the inflated sample size in simulated data [@White2014]. 
+
+```{r}
+cont_aov <- aov(val ~ roughness * radius, data = cont_res)
+broom::tidy(cont_aov)
+```
 
 ## Simulation Two: categorical variables
 
@@ -140,7 +153,7 @@ cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 
 
 ```{r catsim_results}
 cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) + 
-  geom_boxplot() + coord_flip() + 
+  geom_boxplot(lwd = 0.1) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Shannon") 
 
@@ -148,12 +161,19 @@ cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2
 cat_figure
 
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/catsim_figure.tiff", 
-          cat_figure, base_width = 12, base_height = 9.375, dpi = 300)
+          cat_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figure.png", 
-          cat_figure, base_width = 12, base_height = 9.375)
+          cat_figure, base_width = 4.33071)
 ```
 
 **Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+
+Again, we used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. 
+
+```{r}
+cat_aov <- aov(val ~ roughness * radius, data = cat_res)
+broom::tidy(cat_aov)
+```
 
 ## References
 
