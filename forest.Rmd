@@ -154,26 +154,27 @@ forests_narrow <- mutate_at(forests_df, .vars = vars(-sprich), .funs = funs(scal
   filter(variable %in% coefforder) %>%
   mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
-sp_plot <- ggplot(forests_df, aes(x = x, y = y, fill = sprich)) + 
+sp_plot <- ggplot(forests_df %>% mutate(facet = "Tree species richness"), 
+                  aes(x = x, y = y, fill = sprich)) + 
   geom_raster() + coord_equal() + 
-  scale_fill_viridis_c(name = "Species Richness", option = "magma") + 
+  scale_fill_viridis_c(name = "", option = "magma") + 
   xlab("") + ylab("") + 
+  facet_wrap(~facet) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(1,"line"), legend.key.width = unit(1.5, "line"))
+        legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
 cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) + 
   geom_raster() + coord_equal() + 
   facet_wrap(~variable) +
-  scale_fill_viridis_c(name = "Covariate value") + 
+  scale_fill_viridis_c(name = "") + 
   xlab("") + ylab("") + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(1,"line"), legend.key.width = unit(2, "line"))
+        legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
 
-plots <- align_plots(sp_plot, cov_plot, align = 'h', axis = 'tb')
-spatial_plot <- plot_grid(plots[[1]], plots[[2]], labels = c("a)", "b)"), 
-                          label_size = 10, rel_widths = c(1, 1.5))
+spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"), 
+                          label_size = 10, rel_widths = c(1, 1.65))
 
 spatial_plot
 
@@ -271,7 +272,7 @@ mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel))) %>%
   arrange(fvariable) 
 
 globalr2 <- round((1 - (mod_global$deviance / mod_global$null.deviance))*100, 2)
@@ -307,7 +308,7 @@ mod_simple <- step(mod_global)
 
 res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel))) %>%
   arrange(fvariable)
 simplep <- glance(mod_simple)$p.value
 simpler2 <- glance(mod_simple)$r.squared
@@ -329,7 +330,7 @@ mod_mmi <- dredge(mod_global, beta = "none") %>%
 res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
   left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
-  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel))) %>%
   arrange(fvariable)
 
 res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 3, caption = "Results of model averaging")

@@ -1,18 +1,19 @@
+# this ensures that the font size used for figures is the same across all figures
+plot_font_size = 7
+
+rmarkdown::render("forest.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/forest.html")
+rmarkdown::render("jays.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/jays.html")
+rmarkdown::render("simulations.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/simulations.html")
+
+# now the final results plot
 library(ggplot2)
 library(cowplot)
-
-# this ensures that the font size used for figures is the same across all figures
-plot_font_size = 6
-
-rmarkdown::render("simulations.Rmd")
-rmarkdown::render("forest.Rmd")
-rmarkdown::render("jays.Rmd")
 
 # combine the jay and forests results plots into one figure
 load("results/jay_res_figure.Rda")
 load("results/forest_res_figure.Rda")
 
-plot_theme <- theme_set(theme_classic(base_size = 6) + theme(strip.background = element_blank()))
+plot_theme <- theme_set(theme_classic(base_size = plot_font_size) + theme(strip.background = element_blank()))
 
 res_figure <- plot_grid(forest_figure, jay_figure, nrow = 2, labels = c("a)", "b)"), label_size = 10, hjust = 0)
 

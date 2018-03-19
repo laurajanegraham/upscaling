@@ -68,7 +68,7 @@ We are including the quadratic term for temperature (bio1) and precipitation (bi
 fvariable                          coef    2.5 %   97.5 %
 ------------------------------  -------  -------  -------
 (Intercept)                       3.067    3.020    3.115
-MW elevation (2km)               -0.262   -0.378   -0.147
+MW elevation                     -0.262   -0.378   -0.147
 LS elevation                      0.262    0.151    0.374
 Mean elevation                    0.193    0.140    0.246
 Mean elevation : MW elevation     0.139    0.066    0.212
@@ -124,7 +124,7 @@ This model is determined using stepwise selection.
 fvariable                          coef    2.5 %   97.5 %
 ------------------------------  -------  -------  -------
 (Intercept)                       3.067    3.020    3.115
-MW elevation (2km)               -0.262   -0.378   -0.147
+MW elevation                     -0.262   -0.378   -0.147
 LS elevation                      0.262    0.151    0.374
 Mean elevation                    0.193    0.140    0.246
 Mean elevation : MW elevation     0.139    0.066    0.212
@@ -144,19 +144,19 @@ Now to get the model averaged and variable importance estimates. We are using `d
 
 Table: Results of model averaging
 
-fvariable                          coef    2.5 %   97.5 %
-------------------------------  -------  -------  -------
-(Intercept)                       3.064    3.016    3.112
-MW elevation (2km)               -0.272   -0.385   -0.159
-LS elevation                      0.274    0.164    0.385
-Mean elevation                    0.194    0.143    0.245
-Mean elevation : MW elevation     0.116    0.036    0.197
-Mean elevation : LS elevation    -0.061   -0.129    0.006
-Temperature                       0.150    0.119    0.181
-Precipitation                     0.060    0.020    0.099
-Precipitation seasonality        -0.150   -0.180   -0.120
-Temperature (quadratic)          -0.236   -0.262   -0.211
-Precipitation (quadratic)        -0.077   -0.094   -0.059
+fvariable                          coef    2.5 %   97.5 %   importance
+------------------------------  -------  -------  -------  -----------
+(Intercept)                       3.064    3.016    3.112           NA
+MW elevation                     -0.272   -0.385   -0.159    1.0000000
+LS elevation                      0.274    0.164    0.385    1.0000000
+Mean elevation                    0.194    0.143    0.245    1.0000000
+Mean elevation : MW elevation     0.116    0.036    0.197    1.0000000
+Mean elevation : LS elevation    -0.061   -0.129    0.006    0.6152004
+Temperature                       0.150    0.119    0.181    1.0000000
+Precipitation                     0.060    0.020    0.099    1.0000000
+Precipitation seasonality        -0.150   -0.180   -0.120    1.0000000
+Temperature (quadratic)          -0.236   -0.262   -0.211    1.0000000
+Precipitation (quadratic)        -0.077   -0.094   -0.059    1.0000000
 
 # Plots and summary of main results
 

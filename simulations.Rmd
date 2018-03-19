@@ -5,7 +5,7 @@ output:
     toc: true
     keep_md: true
 params:
-  plot_font_size: 6
+  plot_font_size: 8
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -50,8 +50,7 @@ sim_ls <- apply(param_table, 1, function(x) ls_create(x))
 # combine all runs into one dataframe and only take the first replicate of each
 # combination for plotting
 cont_ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
-  filter(reps == 1, radius == 1) %>% 
-  inner_join(group_by(., roughness) %>% summarise(Var = round(var(layer), 2)))
+  filter(reps == 1, radius == 1)
 
 # plot example landscapes
 cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) + 
@@ -83,7 +82,7 @@ cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>%
 
 ```{r contsim_results}
 cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) + 
-  geom_boxplot(lwd = 0.1) + coord_flip() + 
+  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Variance")
 
@@ -153,7 +152,7 @@ cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 
 
 ```{r catsim_results}
 cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) + 
-  geom_boxplot(lwd = 0.1) + coord_flip() + 
+  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Shannon") 
 

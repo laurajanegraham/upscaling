@@ -25,8 +25,9 @@ library(broom)
 library(MuMIn)
 library(stringr)
 library(DHARMa)
-library(tidyverse)
 library(cowplot)
+library(tidyverse)
+
 
 # set up plotting options
 plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
@@ -123,15 +124,17 @@ removed <- filter(jay_sp, index10 == 0)
 jay_sp <- filter(jay_sp, index10 != 0)
 jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -index90, -geometry), .funs = funs(scale)) %>% 
-  gather(variable, value, -geometry)
+  gather(variable, value, -geometry) %>% 
+  mutate(facet = "Relative abundance index")
 
 jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
-  scale_fill_viridis_c(name = "Jay abundance", option = "magma") + 
+  scale_fill_viridis_c(name = "", option = "magma") + 
+  facet_wrap(~facet) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(1,"line"), legend.key.width = unit(1.5, "line"))
+        legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
 covs <- jay_narrow %>% 
   filter(variable %in% varorder[-(1:2)]) %>% 
@@ -140,13 +143,12 @@ covs <- jay_narrow %>%
 cov_plot <- ggplot(covs) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
-  scale_fill_viridis_c() + facet_wrap(~variable) + 
+  scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(1,"line"), legend.key.width = unit(2, "line"))
+        legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
   
-plots <- align_plots(jay_plot, cov_plot, align = 'h', axis = 'tb')
-spatial_plot <- plot_grid(plots[[1]], plots[[2]], labels = c("a)", "b)"), 
+spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), 
                           label_size = 10, rel_widths = c(1, 1.5))
 spatial_plot
 
@@ -194,7 +196,7 @@ And where are the correlations?
 
 ```{r pairs}
 ggpairs(
-  forests_df %>% select(varorder), 
+  jay_df %>% select(varorder), 
   upper = list(
     continuous = wrap('cor', method = "spearman")
   ),

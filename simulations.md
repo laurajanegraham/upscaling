@@ -25,8 +25,7 @@ sim_ls <- apply(param_table, 1, function(x) ls_create(x))
 # combine all runs into one dataframe and only take the first replicate of each
 # combination for plotting
 cont_ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
-  filter(reps == 1, radius == 1) %>% 
-  inner_join(group_by(., roughness) %>% summarise(Var = round(var(layer), 2)))
+  filter(reps == 1, radius == 1)
 
 # plot example landscapes
 cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) + 
@@ -47,14 +46,13 @@ cont_ls_plot
 
 ### Use winmover function
 
-<<<<<<< HEAD
 We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 
 ```r
 cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>% 
   mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
-         roughness = paste0("Roughness = ", roughness))
+         roughness = factor(paste0("Roughness = ", roughness)))
 ```
 
 
@@ -63,24 +61,41 @@ cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>%
 
 ```r
 cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) + 
-  geom_boxplot() + coord_flip() + 
+  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
-  xlab("Moving window size") + ylab("MW Variance") 
+  xlab("Moving window size") + ylab("MW Variance")
 
-cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, align = 'h', rel_widths = c(2, 1))
+cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
 cont_figure
 ```
 
 ![](simulations_files/figure-html/contsim_results-1.png)<!-- -->
 
 ```r
+# Ecol. Letts. figures: 82mm, 110mm, 173mm
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/contsim_figure.tiff", 
-          cont_figure, base_width = 12, base_height = 9.375, dpi = 300)
+          cont_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figure.png", 
-          cont_figure, base_width = 12, base_height = 9.375)
+          cont_figure, base_width = 4.33071)
 ```
 
 **Figure 2** Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+
+We used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. We focus on the effect size rather than the statistical significance due to the inflated sample size in simulated data [@White2014]. 
+
+
+```r
+cont_aov <- aov(val ~ roughness * radius, data = cont_res)
+broom::tidy(cont_aov)
+```
+
+```
+##               term  df     sumsq       meansq  statistic       p.value
+## 1        roughness   2 25.237569 12.618784396  5499.1574  0.000000e+00
+## 2           radius   2 61.982681 30.991340492 13505.7590  0.000000e+00
+## 3 roughness:radius   4  3.429424  0.857355993   373.6283 8.037432e-189
+## 4        Residuals 891  2.044556  0.002294676         NA            NA
+```
 
 ## Simulation Two: categorical variables
 
@@ -134,7 +149,7 @@ cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 
 
 ```r
 cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) + 
-  geom_boxplot() + coord_flip() + 
+  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Shannon") 
 
@@ -146,12 +161,28 @@ cat_figure
 
 ```r
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/catsim_figure.tiff", 
-          cat_figure, base_width = 12, base_height = 9.375, dpi = 300)
+          cat_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figure.png", 
-          cat_figure, base_width = 12, base_height = 9.375)
+          cat_figure, base_width = 4.33071)
 ```
 
 **Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+
+Again, we used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. 
+
+
+```r
+cat_aov <- aov(val ~ roughness * radius, data = cat_res)
+broom::tidy(cat_aov)
+```
+
+```
+##               term  df     sumsq       meansq statistic p.value
+## 1        roughness   2 23.081808 11.540904156  9975.485       0
+## 2           radius   2 53.829054 26.914527160 23263.816       0
+## 3 roughness:radius   4  5.429942  1.357485535  1173.355       0
+## 4        Residuals 891  1.030822  0.001156927        NA      NA
+```
 
 ## References
 
