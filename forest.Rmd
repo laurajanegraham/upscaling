@@ -6,7 +6,7 @@ output:
     toc: true
     keep_md: true
 params:
-  plot_font_size: 6
+  plot_font_size: 7
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -32,7 +32,7 @@ library(tidyverse)
 
 
 # set up plotting options
-plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
+theme_set(theme_classic(base_size = params$plot_font_size) + 
                           theme(strip.background = element_blank()))
 
 varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
@@ -137,6 +137,11 @@ names(var_stack) <- c("sprich", "winvar2000", "elevvar", "elevmean", paste0("bio
 writeRaster(var_stack, filename="results/forests_covariates.tif", 
             options="INTERLEAVE=BAND", overwrite=TRUE)
 
+eu_pts <- gCentroid(eu_grid, byid=TRUE)
+
+forests_sp <- st_as_sf(eu_grid) %>% bind_cols(raster::extract(var_stack, eu_pts) %>% as.tibble)
+save(forests_sp, file="results/forests_covariates_sp.Rda")
+
 forests_df <- as.data.frame(var_stack, xy = TRUE) %>% na.omit
 
 save(forests_df, file="results/forests_covariates.Rda")
@@ -146,35 +151,38 @@ save(forests_df, file="results/forests_covariates.Rda")
 
 What do the variables look like spatially?
 
-```{r spatial_plot, fig.height = 8}
-load("results/forests_covariates.Rda")
+```{r spatial_plot}
+load("results/forests_covariates_sp.Rda")
 
-forests_narrow <- mutate_at(forests_df, .vars = vars(-sprich), .funs = funs(scale)) %>%
-  gather(variable, value, -x, -y) %>%
-  filter(variable %in% coefforder) %>%
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
+forests_narrow <- forests_sp %>% 
+  select(varorder) %>% 
+  mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
+  gather(variable, value, -geometry) %>% 
+  mutate(facet = "Tree species richness") %>% na.omit
 
-sp_plot <- ggplot(forests_df %>% mutate(facet = "Tree species richness"), 
-                  aes(x = x, y = y, fill = sprich)) + 
-  geom_raster() + coord_equal() + 
+sp_plot <- ggplot(forests_narrow %>% filter(variable == "sprich")) + 
+  geom_sf(aes(fill = value), colour = NA) +
+  coord_sf(crs = st_crs(forests_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "", option = "magma") + 
-  xlab("") + ylab("") + 
   facet_wrap(~facet) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
-cov_plot <- ggplot(forests_narrow, aes(x = x, y = y, fill = value)) + 
-  geom_raster() + coord_equal() + 
-  facet_wrap(~variable) +
-  scale_fill_viridis_c(name = "") + 
-  xlab("") + ylab("") + 
+covs <- forests_narrow %>% 
+  filter(variable %in% varorder[-1]) %>% 
+  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
+
+cov_plot <- ggplot(covs) + 
+  geom_sf(aes(fill = value), colour = NA) +
+  coord_sf(crs = st_crs(forests_narrow), datum = NA) + 
+  scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
 
-spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"), 
-                          label_size = 10, rel_widths = c(1, 1.65))
+spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
+                          label_size = 10, rel_widths = c(1, 1.4))
 
 spatial_plot
 

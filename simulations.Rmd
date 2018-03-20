@@ -5,7 +5,7 @@ output:
     toc: true
     keep_md: true
 params:
-  plot_font_size: 8
+  plot_font_size: 7
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -21,7 +21,7 @@ library(R.utils)
 library(tidyverse)
 library(cowplot)
 
-plot_theme <- theme_set(theme_classic(base_size = params$plot_font_size) + 
+theme_set(theme_classic(base_size = params$plot_font_size) + 
                           theme(strip.background = element_blank()))
 
 # load required R functions

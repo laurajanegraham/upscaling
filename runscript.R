@@ -1,9 +1,9 @@
 # this ensures that the font size used for figures is the same across all figures
 plot_font_size = 7
 
-rmarkdown::render("forest.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/forest.html")
-rmarkdown::render("jays.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/jays.html")
-rmarkdown::render("simulations.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/simulations.html")
+rmarkdown::render("forest.Rmd", params = list(plot_font_size = plot_font_size), output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/forest.html")
+rmarkdown::render("jays.Rmd", params = list(plot_font_size = plot_font_size), output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/jays.html")
+rmarkdown::render("simulations.Rmd", params = list(plot_font_size = plot_font_size), output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/simulations.html")
 
 # now the final results plot
 library(ggplot2)
