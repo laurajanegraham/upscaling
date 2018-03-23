@@ -1,6 +1,8 @@
 ---
 title: "Upscaling power analysis"
 output: html_document
+params:
+  noise: 1
 ---
 
 ```{r setup, include=FALSE}
@@ -39,10 +41,12 @@ In order to do this, we simulated several sets of predictors of varying sample s
 - sample size: 30, 50, 100, 500, 1000 (for now, we may wish to extend)
 - correlation: 0.7, 0.75, 0.8, 0.85, 0.9, 0.95
 
+For each sample size, we generated 100 replicates.
+
 ```{r}
-n <- c(30, 50, 100, 500, 1000)
+n <- c(30, 50, 100, 250, 500, 750, 1000, 2000, 5000)
 r <- c(0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
-rep <- 1
+rep <- 1:100
 
 params <- expand.grid(n = n, r = r, rep = rep)
 
@@ -75,12 +79,12 @@ In each case here $\epsilon$ has a normal error structure $\epsilon\sim N(0, 1)$
 
 ```{r}
 df <- pred_df %>% 
-  mutate(y1 = 0.5*x1 + rnorm(n, 0, 1),
-         y2 = 0.5*x1 + 0.5*x2 + rnorm(n, 0, 1),
-         y3 = 0.5*x1 - 0.5*x2 + rnorm(n, 0, 1),
-         y4 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, 1),
-         y5 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1),
-         y6 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1))
+  mutate(y1 = 0.5*x1 + rnorm(n, 0, params$noise),
+         y2 = 0.5*x1 + 0.5*x2 + rnorm(n, 0, params$noise),
+         y3 = 0.5*x1 - 0.5*x2 + rnorm(n, 0, params$noise),
+         y4 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, params$noise),
+         y5 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise),
+         y6 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise))
 ```
 
 ## Models
@@ -89,8 +93,9 @@ For $y_1$ to $y_3$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_
 
 For $y_4$ to $y_6$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_2x_2 + \beta_3x_3 + \epsilon$. Our expectations are as above, but with an effect of $x_3$ = 0.5. 
 
+We calculate the mean of the estimates and the standard errors across the 100 replicates for final analysis. 
+
 ```{r}
-# currently struggling with unnesting due to uneven rows, split into two
 df_mod <- df %>% group_by(n, r, rep) %>% 
   nest() %>% 
   mutate(fit1 = map(data, ~ lm(y1 ~ x1 + x2, data = .x)),
@@ -108,31 +113,97 @@ df_mod <- df %>% group_by(n, r, rep) %>%
   ) %>% 
   select(n, r, rep, mod1, mod2, mod3, mod4, mod5, mod6) %>% 
   gather(key = model, value = result, -n, -r, -rep) %>% 
-  unnest()
+  unnest() %>% group_by(n, r, model, term) %>% 
+  summarise(estimate = mean(estimate), std.error = mean(std.error))
 ```
 
 ## Results
 
+In all cases, the red dashed line at the true value, black dashed line at 0 (not visible if true value is 0). 
+
+$y_1 = 0.5x_1 + \epsilon$
+
+
+
 ```{r}
-mod1 <- filter(df_mod, model == "mod1")
+mod1 <- filter(df_mod, model == "mod1") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, 0), term = c("(Intercept)", "x1", "x2")))
 
-ggplot(mod1, aes(x = term, y = estimate)) + 
+ggplot(mod1, aes(x = r, y = estimate)) + 
   geom_point() + 
-  # change this to conf int
-  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error)) +
-  facet_grid(n ~ r)
-
-
-
-jay_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) + 
-  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`, colour = type), width=0.2, position=pd) +
-  geom_point(position = pd) +
-  scale_color_manual(values = c("grey", "black", "grey")) +
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) +
   geom_hline(yintercept = 0, linetype = "dotted") + 
-  ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
-  xlab("") + theme(legend.position = "none")
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted")
+
 ```
 
+$y = 0.5x_1 + 0.5x_2 + \epsilon$
 
+```{r}
+mod2 <- filter(df_mod, model == "mod2") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, 0.5), term = c("(Intercept)", "x1", "x2")))
 
+ggplot(mod2, aes(x = r, y = estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) + 
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
 
+$y = 0.5x_1 - 0.5x_2 + \epsilon$
+
+```{r}
+mod3 <- filter(df_mod, model == "mod3") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, -0.5), term = c("(Intercept)", "x1", "x2")))
+
+ggplot(mod3, aes(x = r, y = estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) + 
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
+
+$y = 0.5x_1 + 0.5x_3 + \epsilon$
+
+```{r}
+mod4 <- filter(df_mod, model == "mod4") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, 0, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+
+ggplot(mod4, aes(x = r, y = estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) + 
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
+
+$y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$
+
+```{r}
+mod5 <- filter(df_mod, model == "mod5") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, 0.5, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+
+ggplot(mod5, aes(x = r, y = estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) + 
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
+
+$y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$
+
+```{r}
+mod6 <- filter(df_mod, model == "mod6") %>% 
+  inner_join(data.frame(truth = c(0, 0.5, -0.5, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+
+ggplot(mod6, aes(x = r, y = estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+  facet_grid(term ~ n) + 
+  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
+  geom_hline(yintercept = 0, linetype = "dotted")
+```
