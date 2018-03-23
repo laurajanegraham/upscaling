@@ -5,21 +5,134 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+# function to generate pairs of uncorrelated variables
+sim_z <- function (n) matrix(c(rnorm(n, 0, 1), rnorm(n, 0, 1)), nrow = n)
+
+# function to convert an uncorrelated pair of variables z to a correlated pair with coefficient r 
+corr_pair <- function(z, r) {
+  # create the covariance matrix
+  cormat <- matrix(1, nrow = 2, ncol = 2)
+  cormat[upper.tri(cormat)] <- cormat[lower.tri(cormat)] <- r
+  covmat <- cormat * tcrossprod(rep(1, 2))
+  
+  # calculate the Cholesky decomposition of the covariance matrix 
+  ch <- chol(covmat)
+  
+  # we can then multiply ch by a set of uncorrelated variables z to get the appropriately correlated variables. 
+  y <- z %*% ch
+}
 ```
 
 ## Background
 
 The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable and therefore whether there is any benefit to using the MW approach. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
 
-Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable (plus interactions). We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects). 
+Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable. We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects). 
 
-## Methods
+## Predictors
 
 In order to do this, we simulated several sets of predictors of varying sample size and correlation. For each pair of correlated predictors, we also generated a third independent predictor. We therefore have a set of predictors ***X*** where $x_1$ and $x_2$ are correlated, and $x_3$ is independent. The changing parameters in the dataset simulations were:
 
 - sample size: 30, 50, 100, 500, 1000 (for now, we may wish to extend)
 - correlation: 0.7, 0.75, 0.8, 0.85, 0.9, 0.95
 
+```{r}
+n <- c(30, 50, 100, 500, 1000)
+r <- c(0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
+rep <- 1
+
+params <- expand.grid(n = n, r = r, rep = rep)
+
+res <- apply(params, 1, function(p) {
+  n = p['n']
+  r = p['r']
+  rep = p['rep']
+  z <- mapply(rnorm, n, rep(0, 3), rep(1, 3))
+  x <- corr_pair(z[,1:2], r)
+  out <- data.frame(n, r, rep, x, z[,3], row.names = NULL)
+  names(out) <- c("n", "r", "rep","x1", "x2", "x3")
+  return(out)
+})
+
+pred_df <- ldply(res)
+```
+
+## Responses
+
 In order to understand how this differs between models, we will generate response variables for each dataset for the following models:
 
-- y
+- $y = 0.5x_1 + \epsilon$ - only one variable has an effect
+- $y = 0.5x_1 + 0.5x_2 + \epsilon$ - two correlated variables, same effect
+- $y = 0.5x_1 - 0.5x_2 + \epsilon$ - two correlated variables, opposite effect
+- $y = 0.5x_1 + 0.5x_3 + \epsilon$ - two uncorrelated variables (similar to jay)
+- $y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$ - two correlated variables, same effect, plus third independent variable
+- $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$ - two correlated variables, opposite effect, plus third independent variable (similar to forests) 
+
+In each case here $\epsilon$ has a normal error structure $\epsilon\sim N(0, 1)$. We currently do not consider interaction terms in these simulations. We may wish to extend this and include these, and/or look at variable effect sizes. I'm not sure either are really necessary. 
+
+```{r}
+df <- pred_df %>% 
+  mutate(y1 = 0.5*x1 + rnorm(n, 0, 1),
+         y2 = 0.5*x1 + 0.5*x2 + rnorm(n, 0, 1),
+         y3 = 0.5*x1 - 0.5*x2 + rnorm(n, 0, 1),
+         y4 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, 1),
+         y5 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1),
+         y6 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1))
+```
+
+## Models
+
+For $y_1$ to $y_3$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_2x_2 + \epsilon$. We should not get an effect of $x_2$ for the model fit to $y_1$, the effect should be identical for the model fit to $y_2$ and the effect should be opposite for the model fit to $y_3$. 
+
+For $y_4$ to $y_6$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_2x_2 + \beta_3x_3 + \epsilon$. Our expectations are as above, but with an effect of $x_3$ = 0.5. 
+
+```{r}
+# currently struggling with unnesting due to uneven rows, split into two
+df_mod <- df %>% group_by(n, r, rep) %>% 
+  nest() %>% 
+  mutate(fit1 = map(data, ~ lm(y1 ~ x1 + x2, data = .x)),
+         fit2 = map(data, ~ lm(y2 ~ x1 + x2, data = .x)),
+         fit3 = map(data, ~ lm(y3 ~ x1 + x2, data = .x)),
+         fit4 = map(data, ~ lm(y4 ~ x1 + x2 + x3, data = .x)),
+         fit5 = map(data, ~ lm(y5 ~ x1 + x2 + x3, data = .x)),
+         fit6 = map(data, ~ lm(y6 ~ x1 + x2 + x3, data = .x)),
+         mod1 = map(fit1, tidy),
+         mod2 = map(fit2, tidy), 
+         mod3 = map(fit3, tidy),
+         mod4 = map(fit4, tidy),
+         mod5 = map(fit5, tidy),
+         mod6 = map(fit6, tidy)
+  ) %>% 
+  select(n, r, rep, mod1, mod2, mod3, mod4, mod5, mod6) %>% 
+  gather(key = model, value = result, -n, -r, -rep) %>% 
+  unnest()
+```
+
+## Results
+
+```{r}
+mod1 <- filter(df_mod, model == "mod1")
+
+ggplot(mod1, aes(x = term, y = estimate)) + 
+  geom_point() + 
+  # change this to conf int
+  geom_errorbar(aes(ymin = estimate - std.error, ymax = estimate + std.error)) +
+  facet_grid(n ~ r)
+
+
+
+jay_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) + 
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`, colour = type), width=0.2, position=pd) +
+  geom_point(position = pd) +
+  scale_color_manual(values = c("grey", "black", "grey")) +
+  geom_hline(yintercept = 0, linetype = "dotted") + 
+  ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
+  xlab("") + theme(legend.position = "none")
+```
+
+
+
+

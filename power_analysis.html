@@ -123,7 +123,7 @@ $(document).ready(function () {
 <div id="background" class="section level2">
 <h2>Background</h2>
 <p>The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable and therefore whether there is any benefit to using the MW approach. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect.</p>
-<p>Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable (plus interactions). We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects).</p>
+<p>Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable. We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects).</p>
 </div>
 <div id="methods" class="section level2">
 <h2>Methods</h2>
@@ -134,8 +134,14 @@ $(document).ready(function () {
 </ul>
 <p>In order to understand how this differs between models, we will generate response variables for each dataset for the following models:</p>
 <ul>
-<li>y</li>
+<li><span class="math inline">\(y = 0.5x_1 + \epsilon\)</span> - only one variable has an effect</li>
+<li><span class="math inline">\(y = 0.5x_1 + 0.5x_3 + \epsilon\)</span> - two uncorrelated variables (similar to jay)</li>
+<li><span class="math inline">\(y = 0.5x_1 + 0.5x_2 + \epsilon\)</span> - two correlated variables, same effect</li>
+<li><span class="math inline">\(y = 0.5x_1 - 0.5x_2 + \epsilon\)</span> - two correlated variables, opposite effect</li>
+<li><span class="math inline">\(y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon\)</span> - two correlated variables, same effect, plus third independent variable</li>
+<li><span class="math inline">\(y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon\)</span> - two correlated variables, opposite effect, plus third independent variable</li>
 </ul>
+<p>In each case here <span class="math inline">\(\epsilon\)</span> will have a normal error structure <span class="math inline">\(\epsilon\sim N(0, 1)\)</span>. We currently do not consider interaction terms in these simulations.</p>
 </div>
 
 
