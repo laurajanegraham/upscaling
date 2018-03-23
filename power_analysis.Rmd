@@ -1,0 +1,25 @@
+---
+title: "Upscaling power analysis"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable and therefore whether there is any benefit to using the MW approach. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
+
+Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable (plus interactions). We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects). 
+
+## Methods
+
+In order to do this, we simulated several sets of predictors of varying sample size and correlation. For each pair of correlated predictors, we also generated a third independent predictor. We therefore have a set of predictors ***X*** where $x_1$ and $x_2$ are correlated, and $x_3$ is independent. The changing parameters in the dataset simulations were:
+
+- sample size: 30, 50, 100, 500, 1000 (for now, we may wish to extend)
+- correlation: 0.7, 0.75, 0.8, 0.85, 0.9, 0.95
+
+In order to understand how this differs between models, we will generate response variables for each dataset for the following models:
+
+- y

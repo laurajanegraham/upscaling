@@ -5,7 +5,7 @@ output:
     toc: true
     keep_md: true
 params:
-  plot_font_size: 7
+  plot_font_size: 11
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -122,6 +122,7 @@ What do the variables look like spatially?
 load("results/jays_covariates.Rda")
 removed <- filter(jay_sp, index10 == 0)
 jay_sp <- filter(jay_sp, index10 != 0)
+
 jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -index90, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry) %>% 

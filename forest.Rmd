@@ -6,7 +6,7 @@ output:
     toc: true
     keep_md: true
 params:
-  plot_font_size: 7
+  plot_font_size: 11
 bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
@@ -153,7 +153,7 @@ What do the variables look like spatially?
 
 ```{r spatial_plot}
 load("results/forests_covariates_sp.Rda")
-
+load("results/forests_covariates.Rda")
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
