@@ -3,12 +3,17 @@ title: "Upscaling power analysis"
 output: html_document
 params:
   noise: 1
+  n_reps: 20
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, fig.width = 12}
 knitr::opts_chunk$set(echo = TRUE)
 
+library(broom)
+library(plyr)
 library(tidyverse)
+
+theme_set(theme_classic())
 
 # function to generate pairs of uncorrelated variables
 sim_z <- function (n) matrix(c(rnorm(n, 0, 1), rnorm(n, 0, 1)), nrow = n)
@@ -30,9 +35,11 @@ corr_pair <- function(z, r) {
 
 ## Background
 
-The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable and therefore whether there is any benefit to using the MW approach. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
+The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
 
 Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable. We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects). 
+
+Note that while this shows us the conditions under which we are able to detect the differing effects of two correlated variables, I don't believe that it tells us about *when* we should use the MW approach over the LS approach. My argument would be that in general the MW approach should be preferred because this is a more mechanistic way of measuring landscape structure. The useful information these simulations provide is the sample size / correlation coefficient combinations under which one can detect the individual effects of two correlated variables. This is useful for those wishing to include both measures in their analysis. Recommendation would be that if the power does not exist to detect this difference, to include only the MW version. 
 
 ## Predictors
 
@@ -46,7 +53,7 @@ For each sample size, we generated 100 replicates.
 ```{r}
 n <- c(30, 50, 100, 250, 500, 750, 1000, 2000, 5000)
 r <- c(0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
-rep <- 1:100
+rep <- 1:params$n_reps
 
 param_table <- expand.grid(n = n, r = r, rep = rep)
 
@@ -83,7 +90,7 @@ df <- pred_df %>%
          y2 = 0.5*x1 + 0.5*x2 + rnorm(n, 0, params$noise),
          y3 = 0.5*x1 - 0.5*x2 + rnorm(n, 0, params$noise),
          y4 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, params$noise),
-         y5 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise),
+         y5 = 0.5*x1 + 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise),
          y6 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise))
 ```
 
@@ -113,97 +120,201 @@ df_mod <- df %>% group_by(n, r, rep) %>%
   ) %>% 
   select(n, r, rep, mod1, mod2, mod3, mod4, mod5, mod6) %>% 
   gather(key = model, value = result, -n, -r, -rep) %>% 
-  unnest() %>% group_by(n, r, model, term) %>% 
-  summarise(estimate = mean(estimate), std.error = mean(std.error))
+  unnest()
 ```
 
 ## Results
 
-In all cases, the red dashed line at the true value, black dashed line at 0 (not visible if true value is 0). 
+We display two plots for each model: 1) the proportion of replicates where the significance of a coefficient was correctly identified (note, for coefficients where the true value is not equal to zero, this is the number of replicates which identify the coefficient as significant, where the true value is zero, this is the number of replicates where the coefficient was correctly estimated to be non-significant); and 2) the distribution of the coefficient estimate for those replicates (out of 100) for which the significance of the estimate is correctly identified (as determined in plot 1). In all cases, the dashed line in plot 2 is at the true value for this coefficient (used to simulate the y value). 
 
 $y_1 = 0.5x_1 + \epsilon$
 
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod1", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, 0), term = c("x1", "x2"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
 
-```{r}
-mod1 <- filter(df_mod, model == "mod1") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, 0), term = c("(Intercept)", "x1", "x2")))
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
+  facet_grid(term ~ n) + 
+  labs(x = "Correlation coefficient", y = "Proportion") 
 
-ggplot(mod1, aes(x = r, y = estimate)) + 
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
   geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
-  facet_grid(term ~ n) +
-  geom_hline(yintercept = 0, linetype = "dotted") + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted")
-
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
 
 $y = 0.5x_1 + 0.5x_2 + \epsilon$
 
-```{r}
-mod2 <- filter(df_mod, model == "mod2") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, 0.5), term = c("(Intercept)", "x1", "x2")))
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod2", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, 0.5), term = c("x1", "x2"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
-ggplot(mod2, aes(x = r, y = estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
+
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
   facet_grid(term ~ n) + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
-  geom_hline(yintercept = 0, linetype = "dotted")
+  labs(x = "Correlation coefficient", y = "Proportion") 
+
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
 
 $y = 0.5x_1 - 0.5x_2 + \epsilon$
 
-```{r}
-mod3 <- filter(df_mod, model == "mod3") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, -0.5), term = c("(Intercept)", "x1", "x2")))
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod3", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, -0.5), term = c("x1", "x2"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
-ggplot(mod3, aes(x = r, y = estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
+
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
   facet_grid(term ~ n) + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
-  geom_hline(yintercept = 0, linetype = "dotted")
+  labs(x = "Correlation coefficient", y = "Proportion") 
+
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
 
 $y = 0.5x_1 + 0.5x_3 + \epsilon$
 
-```{r}
-mod4 <- filter(df_mod, model == "mod4") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, 0, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod4", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, 0, 0.5), term = c("x1", "x2", "x3"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
-ggplot(mod4, aes(x = r, y = estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
+
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
   facet_grid(term ~ n) + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
-  geom_hline(yintercept = 0, linetype = "dotted")
+  labs(x = "Correlation coefficient", y = "Proportion") 
+
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
 
 $y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$
 
-```{r}
-mod5 <- filter(df_mod, model == "mod5") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, 0.5, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod5", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, 0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
-ggplot(mod5, aes(x = r, y = estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
+
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
   facet_grid(term ~ n) + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
-  geom_hline(yintercept = 0, linetype = "dotted")
+  labs(x = "Correlation coefficient", y = "Proportion") 
+
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
 
 $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$
 
-```{r}
-mod6 <- filter(df_mod, model == "mod6") %>% 
-  inner_join(data.frame(truth = c(0, 0.5, -0.5, 0.5), term = c("(Intercept)", "x1", "x2", "x3")))
+```{r, fig.width = 12}
+df <- filter(df_mod, model == "mod6", term != "(Intercept)") %>% 
+  inner_join(data.frame(truth = c(0.5, -0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
+  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
+                            truth == 0 & p.value >= 0.05 ~ "Correct", 
+                            truth != 0 & p.value < 0.05 ~ "Correct", 
+                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
 
-ggplot(mod6, aes(x = r, y = estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = estimate - 1.96*std.error, ymax = estimate + 1.96*std.error)) +
+mod_vals <- filter(df, signif == "Correct") %>% 
+  group_by(n, r, model, term, truth) %>% 
+  summarise(mean_estimate = mean(estimate), 
+            se_estimate = sd(estimate)/sqrt(n()))
+  
+mod_identified <- group_by(df, n, r, term, signif) %>% 
+  summarise(prop = n()/params$n_reps)
+
+ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
+  geom_bar(stat = "identity") + 
+  scale_fill_viridis_d(name = "Significance Identified") + 
   facet_grid(term ~ n) + 
-  geom_hline(aes(yintercept = truth), colour = "red", linetype = "dotted") + 
-  geom_hline(yintercept = 0, linetype = "dotted")
+  labs(x = "Correlation coefficient", y = "Proportion") 
+
+ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
+  geom_point() + 
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  facet_grid(term ~ n, scales = "free") +
+  geom_hline(aes(yintercept = truth), colour = "red") + 
+  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```

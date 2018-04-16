@@ -5,15 +5,13 @@ output:
   html_document:
     toc: true
     keep_md: true
-params:
-  plot_font_size: 11
-bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, 
-                      fig.width = 12, fig.height = 12)
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = TRUE, warning = TRUE)
+```
 
+```{r setup}
 library(MASS)
 library(winmoveR)
 library(raster)
@@ -32,8 +30,7 @@ library(tidyverse)
 
 
 # set up plotting options
-theme_set(theme_classic(base_size = params$plot_font_size) + 
-                          theme(strip.background = element_blank()))
+theme_set(theme_classic() + theme(strip.background = element_blank()))
 
 varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
 
@@ -48,9 +45,10 @@ coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation",
 
 ## EU forest data
 
-First we need to load in and spatialise the EU forest data. These are data from @Mauri2017. Available for dowload on [figshare](https://ndownloader.figshare.com/files/6662535)
+First we need to load in and spatialise the EU forest data: available for download from [figshare](https://ndownloader.figshare.com/files/6662535)
+
 ```{r euforest_data}
-forests <- read_csv("../DATA/eu_forests/eu_forest_species.csv") %>% 
+forests <- read_csv("~/DATA/BIOLOGICAL/eu_forests/eu_forest_species.csv") %>% 
   mutate(sp_name = `SPECIES NAME`) %>% 
   dplyr::select(X, Y, sp_name)
 
@@ -59,20 +57,21 @@ forests <- SpatialPointsDataFrame(forests[,1:2], forests[,3], proj4string = crs(
 
 ## Environmental data
 
-The data to be upscaled are the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). Note that these are in a specific European projection: European Grid: ETRS89-LAEA. All other datasets will be transformed to this projection. By cropping all datasets to the extent of the EU elevation data, we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. We aggregate the elevation to 100m (from 25m) both for ease of computation and *is there a biological reason??* - also characteristic scale of variation? doesn't really change visually much from 25m to 100m - need to do some kind of test to make sure this simplification if valid. 
+Analyses will be at 0.5 degree resolution. The data to be upscaled are the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). By cropping all datasets to the extent of the EU elevation data, we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. We aggregate the elevation to 100m (from 25m) for ease of computation.
 
-We will use the moving window to upscale the variation in elevation at three scales: 500 m, 1 km, 2 km. We do not have *a priori* expectation of the appropriate scale of effect, but we do have reason to expect that variation in elevation will determine species richness due to the opening up of niche space [citations]. We will also calculate variation in elevation at the 0.5 degree scale. As covariates, to avoid confounding variables, we will calculate average temperature and precipitation at the 0.5 degree scale. 
+We will use the moving window to upscale the variation in elevation using a radius of 2km. We will also calculate variation in elevation at 0.5 degree resolution. As covariates, we  calculated average temperature and precipitation at 0.5 degree resolution. 
 
-```{r envdata, eval = FALSE}
+```{r envdata}
 # This section only gets run the first time (or if changed) and the output saved
 # to file. Set eval = FALSE at all other times.
 
-wc_bio <- getData('worldclim', var = "bio", res = 10, path = "../DATA/worldclim/")
-wc_bio_30 <- aggregate(wc_bio, 3)
+# get climate data
+wc_bio <- getData('worldclim', var = "bio", res = 10, path = "~/DATA/CLIMATE/worldclim/")
+wc_bio_30 <- aggregate(wc_bio, fact = 3)
 
 # load in the elevation data
-#elev <- raster("../DATA/elev/eudem_dem_3035_europe.tif")
-elev <- raster('../DATA/elev/eudem_100m_aggregated.tif')
+#elev <- raster("~/DATA/PHYSICAL/elev/eu_dem/eudem_dem_3035_europe.tif")
+elev <- raster("~/DATA/PHYSICAL/elev/eu_dem/eudem_100m_aggregated.tif")
 
 # get forest and climate data in same projection as elev and crop worldclim data by the EU forest dataset
 forests <- spTransform(forests, crs(elev))
@@ -90,68 +89,62 @@ eu_grid <- as(forests_r, 'SpatialPolygonsDataFrame')
 
 # agg_cell <- function(grid, dat, cell_no, fact, fn="mean", ...) {
 #   cell <- grid[cell_no,]
-#   dat_cell <- crop(dat, cell, filename='../temp_raster/temp_crop.tif', overwrite=TRUE)
-#   dat_cell_agg <- aggregate(dat_cell, fact, fun = fn, filename='../temp_raster/temp_agg.tif', overwrite=TRUE)
+#   dat_cell <- crop(dat, cell, filename='temp_raster/temp_crop.tif', overwrite=TRUE)
+#   dat_cell_agg <- aggregate(dat_cell, fact, fun = fn, 
+#                             filename='temp_raster/temp_agg.tif', overwrite=TRUE)
 #   zero_to_na <- function(x) ifelse(x==0, NA, x)
-#   dat_cell_na <- calc(dat_cell_agg, zero_to_na, ...)
+#   dat_cell_na <- raster::calc(dat_cell_agg, zero_to_na, ...)
 # }
 # 
 # elev_cell_100 <- list()
 # 
 # for(cell_no in 1:length(eu_grid)) {
-#   elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('../DATA/temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
+#   elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, filename=paste0('temp_raster/temp_agg_', cell_no, '.tif'), overwrite=TRUE)
 # }
 # 
-# # need to add the arguments to mosaic as attributes of the raster list. 
+# # need to add the arguments to mosaic as attributes of the raster list.
 # rasters.mosaicargs <- elev_cell_100
+# names(rasters.mosaicargs) <- NULL
 # rasters.mosaicargs$fun <- mean
-# rasters.mosaicargs$filename <- '../DATA/elev/eudem_100m_aggregated.tif'
+# rasters.mosaicargs$filename <- '~/DATA/PHYSICAL/elev/eu_dem/eudem_100m_aggregated.tif'
 # rasters.mosaicargs$overwrite <- TRUE
-# elev_100 <- do.call(mosaic, rasters.mosaicargs)
+# rasters.mosaicargs$na.rm <- TRUE
+# 
+# elev_100 <- do.call("mosaic", rasters.mosaicargs)
 
-elev_100 <- raster('../DATA/elev/eudem_100m_aggregated.tif')
+elev_100 <- elev
 
-# create the grid level elevation mean and variance
-elev_var <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = var,
-                       filename='../DATA/temp_raster/elev_var.tif', overwrite=TRUE)
+# create the grid level covariates
+eu_grid$elevvar <- nomove_upscale(grid = eu_grid, dat = elev_100, fn = "var", na.rm = TRUE)
 
-elev_mean <- aggregate(elev_100, res(forests_r)/res(elev_100), fun = mean,
-                       filename='../DATA/temp_raster/elev_mean.tif', overwrite=TRUE)
+eu_grid$elevmean <- nomove_upscale(grid = eu_grid, dat = elev_100, fn = "mean", na.rm = TRUE)
 
 # upscale the eu elevation data using the moving window approach
-# currently only doing a 2000m radius - might need to adjust
-eu_grid$win_var_2000 <- winmove_upscale(eu_grid, elev_100, 2000, 
+strt <- Sys.time()
+eu_grid$winvar2000 <- winmove_upscale(eu_grid, elev_100, 2000, 
                                         "rectangle", "var")
+run_time <- difftime(Sys.time(), strt, units = "mins")
 
-# stack variables
-win_var_2000 <- rasterize(eu_grid, forests_r, field = eu_grid@data$win_var_2000, fun = "mean")
+save(run_time, file = "results/forest_runtime.Rda")
 
-var_list <- lapply(list(forests_r, win_var_2000, 
-                        elev_var, elev_mean, wc_bio_eu), 
-                   function(x) crop(x, elev))
+forests_pts <- spTransform(gCentroid(eu_grid, byid=TRUE), crs(elev))
 
-var_stack <- stack(var_list)
+forests_sp <- st_as_sf(eu_grid) %>% 
+  bind_cols(raster::extract(wc_bio_eu, forests_pts) %>% as.tibble) %>% 
+  rename(sprich = sp_name)
 
-names(var_stack) <- c("sprich", "winvar2000", "elevvar", "elevmean", paste0("bio", 1:19))
-
-writeRaster(var_stack, filename="results/forests_covariates.tif", 
-            options="INTERLEAVE=BAND", overwrite=TRUE)
-
-eu_pts <- gCentroid(eu_grid, byid=TRUE)
-
-forests_sp <- st_as_sf(eu_grid) %>% bind_cols(raster::extract(var_stack, eu_pts) %>% as.tibble)
 save(forests_sp, file="results/forests_covariates_sp.Rda")
-
-forests_df <- as.data.frame(var_stack, xy = TRUE) %>% na.omit
-
-save(forests_df, file="results/forests_covariates.Rda")
 ```
+
+
+`r load("results/forest_runtime.Rda")`
+Upscaling 100m resolution elevation data for Europe to 0.5 degrees using a 2km radius window took:  `r run_time` minutes. 
 
 ## Exploration and transformation
 
 What do the variables look like spatially?
 
-```{r spatial_plot}
+```{r spatial_plot, fig.width = 10}
 load("results/forests_covariates_sp.Rda")
 load("results/forests_covariates.Rda")
 forests_narrow <- forests_sp %>% 
@@ -184,46 +177,16 @@ cov_plot <- ggplot(covs) +
 spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
                           label_size = 10, rel_widths = c(1, 1.4))
 
+save(spatial_plot, file = "results/forest_spatial.Rda")
+
 spatial_plot
-
-# Ecol. Letts. figures: 82mm, 110mm, 173mm
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/forest_data_figure.tiff", 
-          spatial_plot, base_width = 6.81102, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_forest_data_figure.png", 
-          spatial_plot, base_width = 6.81102)
 ```
 
-what are the minimum and maximum values? 
+How are the variables distributed and where are the correlations?
 
-```{r maxmin_data}
-select(forests_df, varorder) %>%
-  summarise_all(funs(min, max)) %>% 
-  gather(variable, value) %>% 
-  separate(variable, into = c("variable", "minmax"), sep="_") %>%
-  spread(minmax, value) %>% select(variable, min, max) %>%
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel)) %>%
-  arrange(variable) %>%
-  kable(digits = 3)
-```
+```{r pairs, fig.width = 10, fig.height = 10}
+forests_df <- forests_sp %>% as.tibble %>% select(varorder)
 
-How are the variables distributed?
-
-```{r distribution}
-forests_narrow <- gather(forests_df, variable, value) %>% 
-  # order variables by response, interested, covariate
-  filter(variable %in% varorder) %>%
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
-
-ggplot(forests_narrow, aes(x = value)) + 
-  geom_histogram(bins = 30) + 
-  facet_wrap(~variable, scales = "free_x")
-```
-
-Species richness ideal for Poisson distribution, right skew to MW Elevation and LS elevation, Mean elevation, as well as the precipitation variables. 
-
-And where are the correlations?
-
-```{r pairs}
 ggpairs(
   forests_df %>% select(varorder), 
   upper = list(
@@ -233,9 +196,8 @@ ggpairs(
 )
 ```
 
-Not so great. WB Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). Our expectation that variation in elevation would be important is supported here by the fact that the species richness correlation with mean elevation is lower. 
+MW Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). Our expectation that variation in elevation would be important is supported here by the fact that the species richness correlation with mean elevation is lower. Species richness ideal for Poisson distribution; right skew to MW Elevation and LS elevation, Mean elevation, as well as the precipitation variables - need to transform. 
 
-Note that I chose 2 km because it made sense, but when doing this with other window sizes, there was not much difference between the correlation values. I wonder about using a larger window size here. Need to look up some biological reasoning behind the scale. 
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
@@ -261,20 +223,19 @@ ggplot(forests_narrow_t, aes(x = value)) +
   facet_wrap(~variable, scales = "free_x")
 ```
 
-Better, stick with this for now. It's fine because we don't need to interpret these coefficients. 
-
-Now scale the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
+We scaled the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
 
 ```{r scale_data}
-forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scale))
+scale_this <- function(x) as.vector(scale(x))
+forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scale_this))
 ```
 
 # Models
 
 ## Global model
 
-We are including the quadratic term for temperature (bio1) and precipitation (bio12), due to the shape of the relationship between these variables (based on some of the residual diagnostics
-)
+We are including the quadratic term for temperature (bio1) and precipitation (bio12), due to the shape of the relationship between these variables (and based on some earlier residual diagnostics)
+
 ```{r global_model}
 mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2000 + elevmean:elevvar + bio1 + I(bio1^2) + bio12 + I(bio12^2) + bio15, data = forests_df_t, na.action = na.fail)
 
@@ -288,11 +249,11 @@ globalr2 <- round((1 - (mod_global$deviance / mod_global$null.deviance))*100, 2)
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
-So this is weird. Despite the correlation being super low, winvar2000 is the most important variable in the regression. Interestingly there is a negative effect of local-scale (2km) variation in elevation (WB Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
+There is a negative effect of local-scale (2km) variation in elevation (MW Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
 
-This model explains `r globalr2`% of the deviance in tree species richness. This was calculated using D-squared [@Guisan2000a]. 
+This model explains `r globalr2`% of the deviance in tree species richness. This was calculated using D-squared. 
 
-Check the model specification using the DHARMa package [@Hartig2017]. 
+Check the model specification using the DHARMa package. 
 
 ```{r global_validation, fig.height = 8}
 simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
@@ -305,7 +266,7 @@ plotResiduals(forests_df_t$bio12, simulationOutput$scaledResiduals, xlab = "Prec
 plotResiduals(forests_df_t$bio15, simulationOutput$scaledResiduals, xlab = "Precipitation seasonality")
 ```
 
-Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found horrible patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms. It's still not ideal, but it's much better now. The range for this model is also off (2 - 50, instead of 1 - 74). 
+Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms.
 
 ## Parsimonious model
 
@@ -328,7 +289,7 @@ Full model retained.
 
 ## Model average in MMI framework
 
-Now to get the model averaged and variable importance estimates. We are using `dredge` to get the full list of models, then model.avg to get the estimates for the 95% confidence set. 
+Now to get the model averaged and variable importance estimates. We are using `dredge` to get the full list of models, then `model.avg` to get the estimates for the 95% confidence set. 
 
 ```{r mmi_model}
 mod_mmi <- dredge(mod_global, beta = "none") %>% 
@@ -346,7 +307,7 @@ res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(dig
 
 # Plots and summary of main results
 
-The window-based elevation measure was included in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winvar2000") %>% select(importance) %>% round(2)`, as was the landscape elevation measure (summed Akaike weight = `r res_mmi %>% filter(variable == "elevvar") %>% select(importance) %>% round(2)`). MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, WB elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured (I wonder why this is??). The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong, and was not present in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "elevmean:elevvar") %>% select(importance) %>% round(2)`)
+The window-based elevation measure was included in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winvar2000") %>% select(importance) %>% round(2)`, as was the landscape elevation measure (summed Akaike weight = `r res_mmi %>% filter(variable == "elevvar") %>% select(importance) %>% round(2)`). MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, MW elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured. The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong, and was not present in all supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "elevmean:elevvar") %>% select(importance) %>% round(2)`)
 
 ```{r results_out, fig.width = 15, fig.height = 8}
 # This function lets us calculate the coefficient estimate and 95% CI for one
@@ -396,5 +357,3 @@ forest_figure
 
 save(forest_figure, file = "results/forest_res_figure.Rda")
 ```
-
-# References

@@ -35,11 +35,9 @@ theme_set(theme_classic(base_size = params$plot_font_size) +
 
 # set up some options
 # for exploratory plotting
-varorder <- c("index90", "index10", 
-                  "winshannon", "lsshannon", 
-                  "habitat", "urban", "bio1")
+varorder <- c("index10", "winshannon", "lsshannon", "habitat", "urban", "bio1")
 
-varlabel <- c("Abundance (1990 Atlas)", "Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
+varlabel <- c("Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
               "Forest %", "Urban %", "Temperature")
 
 # for initial tables from models
@@ -89,13 +87,9 @@ bng$winshannon <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000
 # shannon without moving window
 bng$lsshannon <- nomove_upscale(grid = bng, dat = lcm, fn = "diversity", lc_class = forest)
 
-habitat <- function(x, lc_class) {
-  prop_class <- sum(as.matrix(x %in% lc_class)) / raster::ncell(x)
-  return(prop_class)
-}
-
-bng$habitat <- nomove_upscale(grid = bng, dat = lcm, fn = "habitat", forest)
-bng$urban <- nomove_upscale(grid = bng, dat = lcm, fn = "habitat", urban)
+# other measures from lcm
+bng$habitat <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", forest)
+bng$urban <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", urban)
 
 # might also be an idea to look at comparing to other fragstats measures (see notes on project sheet)
 
@@ -165,7 +159,7 @@ What are the minimum and maximum values?
 
 ```{r maxmin_data}
 jay_df <- jay_sp %>% as.tibble %>% 
-  select(index90, index10, lsshannon, winshannon, habitat, urban, bio1)
+  select(varorder)
 
 summarise_all(jay_df, funs(min, max) ) %>% 
   gather(variable, value) %>% 

@@ -1,0 +1,187 @@
+---
+title: 'Supplementary Material'
+output: pdf_document
+header-includes:
+    - \usepackage{caption}
+    - \usepackage{booktabs}
+---
+
+\renewcommand{\thetable}{S\arabic{table}}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, fig.width = 10, fig.height = 10)
+
+library(MASS)
+library(sf)
+library(knitr)
+library(GGally)
+library(e1071) # optimising transformations (skewness function)
+library(broom)
+library(MuMIn)
+library(tidyverse)
+
+# scale function
+scale_this <- function(x) as.vector(scale(x))
+
+# set up plotting options
+theme_set(theme_classic() + theme(strip.background = element_blank()))
+```
+
+```{r jay_setup}
+varorder <- c("index10", "winshannon", "lsshannon", "habitat", "urban", "bio1")
+
+varlabel <- c("Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
+              "Forest %", "Urban %", "Temperature")
+
+# for initial tables from models
+coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat", "habitat:winshannon",
+                "habitat:lsshannon","urban", "bio1")
+
+coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", "Forest % : MW Shannon", 
+                "Forest % : LS Shannon", "Urban %", "Temperature")
+
+load("results/jays_covariates.Rda")
+jay_sp <- filter(jay_sp, index10 != 0) %>% select(-index90)
+jay_df <- jay_sp %>% as.tibble %>% 
+  select(index10, lsshannon, winshannon, habitat, urban, bio1)
+
+# optimise to find optimal value for log transform
+skew.score <- function(c, x) (skewness(log(x + c)))^2
+c.habitat <- optimise(skew.score, c(0, 20), x = jay_df$habitat)$minimum
+c.urban <- optimise(skew.score, c(0, 20), x = jay_df$urban)$minimum
+x <- min(jay_df$index10[jay_df$index10 > 0])
+
+# transform and scale data for modelling
+jay_df_t <- mutate(jay_df, 
+                   index10_logit = log((index10 + x)/(1 - index10 + x)),
+                   habitat = log(habitat + c.habitat),
+                   urban = log(urban + c.urban),
+                   bio1 = bio1^3)
+
+jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index10), .funs = funs(scale_this))
+```
+
+```{r jay_plot}
+ggpairs(
+  jay_df %>% select(varorder), 
+  upper = list(
+    continuous = wrap('cor', method = "spearman")
+  ),
+  columnLabels = varlabel
+)
+```
+
+Figure S1: Pairs plot of *Garrulus glandarius* relative abundance and covariates. Correlations shown are Spearman's $\rho$.
+
+```{r jay_tables}
+mod_global <- lm(index10_logit ~ habitat + winshannon + lsshannon + urban + bio1 + habitat:lsshannon + habitat:winshannon, data = jay_df_t, na.action = na.fail)
+
+res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
+  arrange(fvariable) 
+
+res_global %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the global model for relative abundance of \\textit{Garrulus glandarius}."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+
+mod_simple <- step(mod_global, trace = 0)
+
+res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
+  arrange(fvariable)
+
+res_simple %>% select(fvariable, coef) %>% kable(caption = "Results of the parsimonious model for relative abundance of \\textit{Garrulus glandarius}.", col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+
+mod_mmi <- dredge(mod_global, beta = "none") %>% 
+  model.avg(subset = cumsum(weight) <= 0.95)
+
+# mmi averaged estimates
+res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
+  left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
+  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]"),
+         importance = round(importance, 2)) %>%
+  arrange(fvariable)
+
+res_mmi %>% select(fvariable, coef, importance) %>% kable(caption = "Results of the model averaging for relative abundance of \\textit{Garrulus glandarius}.", col.names = c("Variable", "Estimate [95 % confidence interval]", "Variable Importance"), align = c("l", "r", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+```
+
+```{r forest_setup}
+varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
+
+varlabel <- c("Species richness", "MW Elevation (2km)", "LS Elevation", "Mean Elevation", "Temperature", "Precipitation", "Precip. seasonality")
+
+coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
+
+coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
+
+load("results/forests_covariates.Rda")
+
+# optimise to find optimal value for log transform
+skew.score <- function(c, x) (skewness(log(x + c)))^2
+c.winvar2000 <- optimise(skew.score, c(0, 20), x = forests_df$winvar2000)$minimum
+c.elevvar <- optimise(skew.score, c(0, 20), x = forests_df$elevvar)$minimum
+c.elevmean <- optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum
+c.bio12 <- optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum
+c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
+
+
+forests_df_t <- select(forests_df, varorder) %>% 
+  mutate(winvar2000 = log(winvar2000 + c.winvar2000),
+         elevvar = log(elevvar + c.elevvar),
+         elevmean = log(elevmean + c.elevmean),
+         bio12 = log(bio12 + c.bio12),
+         bio15 = log(bio15 + c.bio15))
+
+forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scale_this))
+```
+
+```{r forest_plot}
+ggpairs(
+  forests_df %>% select(varorder), 
+  upper = list(
+    continuous = wrap('cor', method = "spearman")
+  ),
+  columnLabels = varlabel
+)
+```
+
+Figure S2: Pairs plot of European tree species richness and covariates. Correlations shown are Spearman's $\rho$.
+
+```{r forest_tables}
+mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2000 + elevmean:elevvar + bio1 + I(bio1^2) + bio12 + I(bio12^2) + bio15, data = forests_df_t, na.action = na.fail)
+
+res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel)),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
+  arrange(fvariable) 
+
+res_global %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the global model for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+
+mod_simple <- step(mod_global, trace = 0)
+
+res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel)),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
+  arrange(fvariable)
+
+res_simple %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the parsimonious model for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+
+mod_mmi <- dredge(mod_global, beta = "none") %>% 
+  model.avg(subset = cumsum(weight) <= 0.95)
+
+res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
+  left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
+  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel)),
+         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
+  arrange(fvariable)
+
+res_mmi %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the model averaging for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
+```
+
