@@ -99,13 +99,8 @@ cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) +
   xlab("Moving window size") + ylab("MW Variance")
 
 cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
+save(cont_figure, file = "results/contsim_figure.Rda")
 cont_figure
-
-# Ecol. Letts. figures: 82mm, 110mm, 173mm
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/contsim_figure.tiff", 
-          cont_figure, base_width = 4.33071, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figure.png", 
-          cont_figure, base_width = 4.33071)
 ```
 
 Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
@@ -169,12 +164,8 @@ cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) +
   xlab("Moving window size") + ylab("MW Shannon") 
 
 cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
+save(cat_figure, file = "results/catsim_figure.Rda")
 cat_figure
-
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/catsim_figure.tiff", 
-          cat_figure, base_width = 4.33071, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figure.png", 
-          cat_figure, base_width = 4.33071)
 ```
 
 Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
@@ -185,6 +176,8 @@ Again, we used a two-way analysis of variance in order to understand the effect 
 cat_aov <- aov(val ~ roughness * radius, data = cat_res)
 broom::tidy(cat_aov)
 ```
+
+## Session Info
 
 ```{r}
 devtools::session_info()

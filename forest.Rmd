@@ -38,7 +38,6 @@ library(stringr)
 library(DHARMa)
 library(tidyverse)
 
-
 # set up plotting options
 theme_set(theme_classic() + theme(strip.background = element_blank()))
 
@@ -64,7 +63,7 @@ First we need to load in and spatialise the EU forest data: available for downlo
 
 ```{r euforest_data, eval = FALSE}
 # we only need this step the first time - once combined with the environmental data the
-# output is saved to results/forests_covariates_sp.Rda for further use
+# output is saved to results/forests_covariates.Rda for further use
 forests <- read_csv("~/DATA/BIOLOGICAL/eu_forests/eu_forest_species.csv") %>% 
   mutate(sp_name = `SPECIES NAME`) %>% 
   dplyr::select(X, Y, sp_name)
@@ -151,7 +150,7 @@ eu_grid$winvar2000 <- winmove_upscale(eu_grid, elev_100, 2000,
                                         "rectangle", "var")
 run_time <- difftime(Sys.time(), strt, units = "mins")
 
-save(run_time, file = "results/forest_runtime.Rda")
+save(run_time, file = "results/forests_runtime.Rda")
 
 forests_pts <- spTransform(gCentroid(eu_grid, byid=TRUE), crs(elev))
 
@@ -159,11 +158,11 @@ forests_sp <- st_as_sf(eu_grid) %>%
   bind_cols(raster::extract(wc_bio_eu, forests_pts) %>% as.tibble) %>% 
   rename(sprich = sp_name)
 
-save(forests_sp, file="results/forests_covariates_sp.Rda")
+save(forests_sp, file="results/forests_covariates.Rda")
 ```
 
 
-`r load("results/forest_runtime.Rda")`
+`r load("results/forests_runtime.Rda")`
 Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 2km radius window took:  `r round(run_time, 2)` minutes. 
 
 ## Exploration and transformation
@@ -171,7 +170,7 @@ Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution usi
 What do the variables look like spatially?
 
 ```{r spatial_plot, fig.width = 10}
-load("results/forests_covariates_sp.Rda")
+load("results/forests_covariates.Rda")
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
@@ -204,7 +203,7 @@ cov_plot <- ggplot(covs) +
 spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
                           label_size = 10, rel_widths = c(1, 1.4))
 
-save(spatial_plot, file = "results/forest_spatial.Rda")
+save(spatial_plot, file = "results/forests_spatial.Rda")
 
 spatial_plot
 ```
@@ -258,6 +257,8 @@ forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scal
 ```
 
 # Models
+
+For each model, our sample size is n = `r nrow(forests_df_t)`. 
 
 ## Global model
 
@@ -362,7 +363,7 @@ Only the global model was contained within the 95% confidence set, therefore all
 
 MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, MW elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured. The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong.
 
-```{r results_out, fig.width = 15, fig.height = 8}
+```{r results_out}
 # This function lets us calculate the coefficient estimate and 95% CI for one variable at
 # a particular value of the other variable in an interaction
 calc_estci <- function(mod, variable1, variable2, value) {
@@ -410,9 +411,10 @@ forest_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) 
 
 forest_figure
 
-save(forest_figure, file = "results/forest_res_figure.Rda")
+save(forest_figure, file = "results/forests_res_figure.Rda")
 ```
 
+## Session Info
 ```{r}
 devtools::session_info()
 ```

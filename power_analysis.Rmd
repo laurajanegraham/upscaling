@@ -233,7 +233,7 @@ ggplot(mod_vals, aes(x = r, y = mean_estimate)) +
 
 In all cases, a sample size $\geq 500$ is required to correctly identify the significance and magnitude of an effect at all correlation levels. For correlation $\leq r = 0.9$, this drops to $n = 250$. The majority of macroecological analyses will have sample sizes of this magnitude. 
 
-## Session info
+## Session Info
 
 ```{r}
 devtools::session_info()
