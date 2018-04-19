@@ -43,7 +43,8 @@ coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", "Forest % :
 load("results/jays_covariates.Rda")
 jay_sp <- filter(jay_sp, index10 != 0)
 jay_df <- jay_sp %>% as.tibble %>% 
-  select(index10, lsshannon, winshannon, habitat, urban, bio1)
+  select(index10, lsshannon, winshannon, habitat, urban, bio1) %>% 
+  na.omit
 
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
@@ -118,7 +119,7 @@ coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:wi
 
 coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
 
-load("results/forests_covariates_sp.Rda")
+load("results/forests_covariates.Rda")
 
 forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit
 
