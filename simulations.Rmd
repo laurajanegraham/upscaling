@@ -1,28 +1,38 @@
 ---
-title: 'Upscaling: Simulations'
-output: 
-  html_document:
-    toc: true
-    keep_md: true
-params:
-  plot_font_size: 7
-bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
+title: "Appendix II: simulated landscapes"
+output: pdf_document
+header-includes:
+    - \usepackage{booktabs}
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, 
-                      fig.width = 12, fig.height = 12)
+```{r}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
 
+## Required packages
+
+In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using:
+
+`devtools::install_github("laurajanegraham/winmoveR")`
+
+Also required are NLMR and landscapetools:
+
+`devtools::install_github("ropensci/NLMR", ref = "develop")`
+`devtools::install_github("ropensci/landscapetools")`
+
+Helper functions `ls_analyse()`, `ls_create()` and `torus_create()` are loaded at this stage, these are available from [put link to zenodo version of repo once created] (for now it's [here](github.com/laurajanegraham/UPSCALING/R)).
+
+```{r setup}
 # load required libraries
 library(winmoveR)
 library(plyr)
+library(landscapetools)
 library(NLMR)
 library(R.utils)
 library(tidyverse)
 library(cowplot)
 
-theme_set(theme_classic(base_size = params$plot_font_size) + 
-                          theme(strip.background = element_blank()))
+theme_set(theme_classic() + theme(strip.background = element_blank()))
 
 # load required R functions
 sourceDirectory("R")
@@ -34,7 +44,7 @@ This simulation shows the use of the moving window based spatial structure measu
 
 ### Simulated landscapes
 
-We simulated landscapes using the mid-point displacement method (`nlm_mpd`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `roughness` parameter where a value of zero is a clustered landscape, and a value of one is a rough landscape. We generated landscapes of 65 x 65 cells using roughness = 0, 0.5, 1. We scaled each landscape to have a mean of zero, and a variance of one in order to facilitate comparison between landscapes. 
+We simulated landscapes using the mid-point displacement method (`nlm_mpd`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `roughness` parameter where a value of zero is a clustered landscape, and a value of one is a rough landscape. We generated landscapes of 65 x 65 cells using roughness = 0, 0.5, 1. We scaled each landscape to have a mean of zero, and a variance of one in order to facilitate comparison between landscapes. Example landscapes for each level of roughness are shown below. 
 
 ```{r sim_ls}
 nrows <- ncols <- 65
@@ -42,7 +52,9 @@ roughness <- c(0, 0.5, 1)
 radius <- c(1, 7, 17)
 reps <- 1:100
 
-param_table <- expand.grid(ncol = ncols, nrow = nrows, roughness = roughness, radius = radius, reps = reps)
+# set up a table with all combinations of parameters
+param_table <- expand.grid(ncol = ncols, nrow = nrows, roughness = roughness, 
+                           radius = radius, reps = reps)
 
 # simulate 65 x 65 landscapes with mean = 0, variance = 1 and variable roughness
 sim_ls <- apply(param_table, 1, function(x) ls_create(x))
@@ -60,12 +72,11 @@ cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) +
   theme(axis.text = element_blank(), axis.title = element_blank(), 
         axis.line = element_blank(), axis.ticks = element_blank()) + 
   facet_wrap(~roughness, ncol = 1) + 
-  theme(strip.background = element_blank(),strip.text.x = element_blank(), legend.position = "none")
+  theme(strip.background = element_blank(), strip.text.x = element_blank(), 
+        legend.position = "none")
 
 cont_ls_plot
 ```
-
-**Figure 1** Example landscapes of each level of roughness
 
 ### Use winmover function
 
@@ -73,7 +84,8 @@ We used the `winmove` function from the [`winmoveR`](https://github.com/laurajan
 
 ```{r contsim_winmove}
 cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>% 
-  mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
+  mutate(radius = factor(radius, 
+                         labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
          roughness = factor(paste0("Roughness = ", roughness)))
 ```
 
@@ -96,9 +108,9 @@ save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_contsim_figu
           cont_figure, base_width = 4.33071)
 ```
 
-**Figure 2** Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
 
-We used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. We focus on the effect size rather than the statistical significance due to the inflated sample size in simulated data [@White2014]. 
+We used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. We focus on the effect size rather than the statistical significance due to the inflated sample size in simulated data. 
 
 ```{r}
 cont_aov <- aov(val ~ roughness * radius, data = cont_res)
@@ -111,7 +123,7 @@ This simulation will show the use of the moving window-based spatial structure m
 
 ### Simulated landscapes
 
-We will use the simulated landscapes from the previous example, and use the `util_classify` function to classify into equal proportions of three habitat types. This will give us a landscape scale Shannon evenness of 1 for all landscapes (complete evenness). 
+We will use the simulated landscapes from the previous example, and use the `util_classify` function to classify into equal proportions of three habitat types. This will give us a landscape scale Shannon evenness of 1 for all landscapes (complete evenness). Example categorical landscapes for each level of roughness are shown below. 
 
 ```{r cat_ls}
 cat_ls_df <- ldply(sim_ls, function(x) {
@@ -130,12 +142,11 @@ cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) +
   theme(axis.text = element_blank(), axis.title = element_blank(), 
         axis.line = element_blank(), axis.ticks = element_blank()) + 
   facet_wrap(~roughness, ncol = 1) + 
-  theme(strip.background = element_blank(),strip.text.x = element_blank(), legend.position = "none")
+  theme(strip.background = element_blank(),strip.text.x = element_blank(), 
+        legend.position = "none")
 
 cat_ls_plot
 ```
-
-**Figure 3** Example categorical landscapes of each level of roughness
 
 ### Use winmover function
 
@@ -143,7 +154,8 @@ We used the `winmove` function from the [`winmoveR`](https://github.com/laurajan
 
 ```{r catsim_winmove}
 cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 0:2)) %>% 
-  mutate(radius = factor(radius, labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
+  mutate(radius = factor(radius, 
+                         labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
          roughness = paste0("Roughness = ", roughness))
 ```
 
@@ -165,7 +177,7 @@ save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_catsim_figur
           cat_figure, base_width = 4.33071)
 ```
 
-**Figure 4** Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
 
 Again, we used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. 
 
@@ -174,5 +186,6 @@ cat_aov <- aov(val ~ roughness * radius, data = cat_res)
 broom::tidy(cat_aov)
 ```
 
-## References
-
+```{r}
+devtools::session_info()
+```

@@ -1,5 +1,5 @@
 ---
-title: 'Supplementary Material'
+title: 'Appendix S1: Additional figures and tables'
 output: pdf_document
 header-includes:
     - \usepackage{caption}
@@ -41,7 +41,7 @@ coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", "Forest % :
                 "Forest % : LS Shannon", "Urban %", "Temperature")
 
 load("results/jays_covariates.Rda")
-jay_sp <- filter(jay_sp, index10 != 0) %>% select(-index90)
+jay_sp <- filter(jay_sp, index10 != 0)
 jay_df <- jay_sp %>% as.tibble %>% 
   select(index10, lsshannon, winshannon, habitat, urban, bio1)
 
@@ -118,7 +118,9 @@ coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:wi
 
 coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation", "Mean elevation : MW elevation", "Mean elevation : LS elevation", "Temperature", "Precipitation", "Precipitation\nseasonality", "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
 
-load("results/forests_covariates.Rda")
+load("results/forests_covariates_sp.Rda")
+
+forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit
 
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
@@ -161,27 +163,5 @@ res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef")
   arrange(fvariable) 
 
 res_global %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the global model for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
-
-mod_simple <- step(mod_global, trace = 0)
-
-res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel)),
-         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
-  arrange(fvariable)
-
-res_simple %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the parsimonious model for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
-
-mod_mmi <- dredge(mod_global, beta = "none") %>% 
-  model.avg(subset = cumsum(weight) <= 0.95)
-
-res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
-  left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
-  mutate(fvariable = factor(variable, levels = coefforder, labels = gsub("\n", " ", coefflabel)),
-         coef = paste0(round(coef, 2), " [", round(`2.5 %`, 2), ", ", round(`97.5 %`, 2), "]")) %>%
-  arrange(fvariable)
-
-res_mmi %>% select(fvariable, coef) %>% kable(caption = paste0("Results of the model averaging for European tree species richness."), col.names = c("Variable", "Estimate [95 % confidence interval]"), align = c("l", "r"), format = "latex", longtable = FALSE, booktabs = TRUE)
 ```
 

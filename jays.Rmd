@@ -1,18 +1,23 @@
 ---
-title: "Upscaling: Jay Case Study"
-output: 
-  html_document:
-    toc: true
-    keep_md: true
-params:
-  plot_font_size: 11
-bibliography: C:\Users\lg1u16\Documents\mendeley_bibtex\library.bib
+title: "Appendix III: *Garrulus glandarius case study"
+output: pdf_document
+header-includes:
+    - \usepackage{booktabs}
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, 
-                      fig.width = 12, fig.height = 12)
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
 
+## Required packages
+
+In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using `devtools::install_github("laurajanegraham/winmoveR")`
+
+The development version of ggplot2 is required for the spatial plots. Install using `devtools::install_github("tidyverse/ggplot2")`
+
+Other options in this section set the order and labels for the variables for plotting and tables. 
+
+```{r setup}
 library(winmoveR)
 library(raster)
 library(rgdal)
@@ -30,8 +35,7 @@ library(tidyverse)
 
 
 # set up plotting options
-theme_set(theme_classic(base_size = params$plot_font_size) + 
-                          theme(strip.background = element_blank()))
+theme_set(theme_classic() + theme(strip.background = element_blank()))
 
 # set up some options
 # for exploratory plotting
@@ -54,71 +58,72 @@ coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %",
 
 ## Relative abundance index
 
-First we need to load in and spatialise the Jay (*Garrulus glandarius*) data. These were provided by Simon Gillings at the BTO. The data includes the relative abundance indices for the 1990 Atlas (index90) and for the 2010 Atlas (index10). 
+First we need to load in and spatialise the Jay (*Garrulus glandarius*) data. These were provided by Simon Gillings at the BTO. The data includes the relative abundance indices for the 1990 Atlas (index90) and for the 2010 Atlas (index10). We are using the 2010 Atlas data. 
 
 ```{r bto_data}
-jay_sp <- read_sf("../DATA/bng/10km_grid_region.shp") %>% 
+jay_sp <- read_sf("~/DATA/ADMINISTRATIVE/bng/10km_grid_region.shp") %>% 
   rename(grid = TILE_NAME) %>% 
-  inner_join(read_csv("../DATA/bto_jays/extract.csv") %>% 
+  inner_join(read_csv("~/DATA/BIOLOGICAL/bto_jays/extract.csv") %>% 
                rename(grid = tenkm)) %>%
-  select(index90, index10, geometry) %>%
+  select(index10, geometry) %>%
   filter(!is.na(geometry))
 ```
 
 ## Environmental data
 
-The data for which we want to use the upscaling approach on is Land Cover Map 2007 [@Morton2011], which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting [@Hougner2005; @Holden2006]. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale [needs citation] and without the moving window at the 10km scale. As covariates, to avoid confounding variables, we will calculate forest (habitat) cover percentage, urban land cover percentage and from Worldclim the following bioclimatic variables at the 10km scale: temperature (bio1), temperature range (bio7), annual preciptation (bio12) and precipitation seasonality (bio15). 
+The data for which we want to use the upscaling approach on is Land Cover Map 2007, which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale [needs citation] and without the moving window at the 10km scale. As covariates, we will calculate forest (habitat) cover percentage, urban land cover percentage and from Worldclim the following bioclimatic variables at the 10km scale: temperature (bio1), temperature range (bio7), annual preciptation (bio12) and precipitation seasonality (bio15). 
 
-```{r envdata, eval = FALSE}
-# This section only gets run the first time (or if changed) and the output saved
-# to file. Set eval = FALSE at all other times.
-lcm <- raster("../DATA/lcm/lcm2007_25m_gb.tif")
+```{r envdata}
+# This section only gets run the first time (or if changed) and the output saved to file.
+# Set eval = FALSE at all other times.
+lcm <- raster("~/DATA/LULC/lcm2007/lcm2007_25m_gb.tif")
 forest <- c(1, 2) # these are the two forest classes
 urban <- c(22, 23)
 
-# grid needs to be SpatialPolygonsDataFrame until I update the winmoveR package to use sf objects
+# grid needs to be SpatialPolygonsDataFrame until I update the winmoveR package to use sf
+# objects
 bng <- as(jay_sp, 'Spatial')
 
 # shannon via moving window
+strt <- Sys.time()
 bng$winshannon <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, 
                                             type = "rectangle", fn = "diversity", 
                                             lc_class = forest)
+run_time <- difftime(Sys.time(), strt, units = "mins")
+
+save(run_time, file = "results/jays_runtime.Rda")
 
 # shannon without moving window
-bng$lsshannon <- nomove_upscale(grid = bng, dat = lcm, fn = "diversity", lc_class = forest)
+bng$lsshannon <- nomove_upscale(grid = bng, dat = lcm, 
+                                fn = "diversity", lc_class = forest)
 
 # other measures from lcm
-bng$habitat <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", forest)
-bng$urban <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", urban)
-
-# might also be an idea to look at comparing to other fragstats measures (see notes on project sheet)
+bng$habitat <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", lc_class = forest)
+bng$urban <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", lc_class = urban)
 
 # Bioclimatic variables from worldclim
-wc_bio <- getData('worldclim', var = 'bio', path = '../DATA/worldclim/', res=5)
+wc_bio <- getData('worldclim', var = 'bio', path = '~/DATA/CLIMATE/worldclim/', res=5)
 bng_pts <- spTransform(gCentroid(bng, byid=TRUE), crs(wc_bio))
-jay_sp <- jay_sp %>% bind_cols(raster::extract(wc_bio, bng_pts) %>% as.tibble)
-
-# NB AT PRESENT I'M MISSING SOME TEMPERATURE VALUES - NEED TO SORT OUT THAT CODE
-# (PROCEED THOUGH AS IT'S ONLY 24 POINTS) - I ACTUALLY THINK IT'S AT SLIGHTLY
-# THE WRONG RESOLUTION TOO (5 MINUTES < 10KM ~ 9.2KM)...BETTER APPROACH WOULD BE
-# TO RESAMPLE THE RASTER TO 10KM THEN EXTRACT.
+jay_sp <- st_as_sf(bng) %>% bind_cols(raster::extract(wc_bio, bng_pts) %>% as.tibble)
 
 save(jay_sp, file="results/jays_covariates.Rda")
 ```
 
+`r load("results/jays_runtime.Rda")`
+Upscaling 25m resolution land-cover data for Europe to 10km degrees resolution using a 1km radius window took:  `r round(run_time, 2)` minutes. 
+
 ## Exploration and transformation
 
-We need to first remove cells with 0 abundance - these cause issues with the model fit and we are only really interested in predicting abundance presuming the species is present. Why are zeroes more complicated? Potential discussion point... 
+We need to first remove cells with 0 abundance - these cause issues with the model fit and we are only really interested in predicting abundance presuming the species is present. 
 
 What do the variables look like spatially?
 
-```{r spatial_plot, fig.height = 8}
+```{r spatial_plot, fig.width = 10}
 load("results/jays_covariates.Rda")
-removed <- filter(jay_sp, index10 == 0)
 jay_sp <- filter(jay_sp, index10 != 0)
 
 jay_narrow <- jay_sp %>% 
-  mutate_at(.vars = vars(-index10, -index90, -geometry), .funs = funs(scale)) %>% 
+  mutate_at(.vars = vars(-index10, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry) %>% 
   mutate(facet = "Relative abundance index")
 
@@ -127,69 +132,37 @@ jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "", option = "magma") + 
   facet_wrap(~facet) + 
-  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+  theme(axis.text = element_blank(), axis.line = element_blank(), 
+        axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
 covs <- jay_narrow %>% 
-  filter(variable %in% varorder[-(1:2)]) %>% 
+  filter(variable %in% varorder[-1]) %>% 
   mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
 cov_plot <- ggplot(covs) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
-  theme(axis.text = element_blank(), axis.line = element_blank(), axis.ticks = element_blank(),
+  theme(axis.text = element_blank(), axis.line = element_blank(), 
+        axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
   
 spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), 
                           label_size = 10, rel_widths = c(1, 1.5))
+
+save(spatial_plot, file = "results/jays_spatial.Rda")
+
 spatial_plot
-
-# Ecol. Letts. figures: 82mm, 110mm, 173mm
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/jay_data_figure.tiff", 
-          spatial_plot, base_width = 6.81102, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/lores_jay_data_figure.png", 
-          spatial_plot, base_width = 6.81102)
-
 ```
 
-What are the minimum and maximum values? 
-
-```{r maxmin_data}
-jay_df <- jay_sp %>% as.tibble %>% 
-  select(varorder)
-
-summarise_all(jay_df, funs(min, max) ) %>% 
-  gather(variable, value) %>% 
-  separate(variable, into = c("variable", "minmax"), sep="_") %>%
-  spread(minmax, value) %>% select(variable, min, max) %>%
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel)) %>%
-  arrange(variable) %>%
-  kable(digits = 3)
-```
-
-Bit worrying that the maximum value for landscape-Shannon is (slightly) above 1... Need to go back and check, but it generally looks about right otherwise. 
-
-How are the variables distributed?
-
-```{r distribution}
-jay_narrow <- gather(jay_df, variable, value) %>% 
-  # order variables by response, interested, covariate
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
-ggplot(jay_narrow, aes(x = value)) + 
-  geom_histogram(bins = 30) + 
-  facet_wrap(~variable, scales = "free_x")
-```
-
-Lots of zeros in the 1990 index. Likely that this is more to do with surveyed cells than actual abundances. Start with the 2010 Atlas, then if we move to look at comparison we might want to think of removing zero rows (or rows which are not zero in both 2010 and 1990). 
-
-Right skew to habitat percentage, urban percentage and precipitation, and left skew to temperature. 
-
-And where are the correlations?
+How are the variables distributed and where are the correlations?
 
 ```{r pairs}
+jay_df <- jay_sp %>% as.tibble %>% select(varorder)
+
 ggpairs(
   jay_df %>% select(varorder), 
   upper = list(
@@ -199,9 +172,9 @@ ggpairs(
 )
 ```
 
-Good sign to start! Strongest correlate of both indices is temperature followed by the window-based Shannon measure. After that it's urban percentage, followed by the landscape-based Shannon measure, followed by percentage cover of habitat. Interestingly, although both Shannon measures correlate with the amount of habitat, the window-based measure is least correlated with this (still very high). The `r cor(jay_df$winshannon, jay_df$lsshannon, method = "spearman")` between the two Shannon measures means we will have issues with Type II errors when we include both - need to remember this. One point about the 'high' (not really high, but relative to other predictors) correlation between urban percentage and jay abundance: this is potentially an observation thing, but also jays are becoming more associated with urban habitats [parks, cemetaries etc, see @Holden2006], so it may be a real effect. Anyway, it's worth including. 
+MW Shannon a stronger correlate of relative abundance than LS Shannon. Although both Shannon measures correlate with the amount of habitat, MW Shannon is least correlated with this (still very high). Right skew to habitat percentage, urban percentage and precipitation, and left skew to temperature. 
 
-Based on distributions (and some initial modeling not shown) need to transform the temperature, habitat and urban percentage variables. Additionally, because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 0 and 1 in data [@Warton2011]:
+Based on distributions (and some initial model diagnostics not shown) need to transform the temperature, habitat and urban percentage variables. Additionally, because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 0 and 1 in data:
 
 ```{r transform}
 # optimise to find optimal value for log transform
@@ -225,38 +198,25 @@ ggplot(jay_narrow_t, aes(x = value)) +
 
 ```
 
-The abundance score for some cells was equal to 0, so the smallest non-zero percentage response (`r round(x, 2)`) was added to the logit function.
-
-Better, stick with this for now. It's fine because we don't need to interpret these coefficients. 
+The abundance score for two cells was equal to 1, so the smallest non-zero percentage response (`r round(x, 2)`) was added to the logit function to avoid divide by zero issues.
 
 Now scale the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
 
 ```{r scale_data}
 scale_this <- function(x) as.vector(scale(x))
-jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index90, -index10), .funs = funs(scale_this))
+jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index10), .funs = funs(scale_this))
 ```
 
 # Models 
-
-Following @Smith2011c we use three approaches to quantify the relative importance of the window-based Shannon measure over the more traditional landscape level measure (and habitat amount??): we compare the partial regression coefficients from a global model, the parsimonious model, and the model average of all supported models in a multi-model inference framework (MMI)
 
 ## Global model
 
 This is the model which contains all predictors (window- and landscape-based Shannon measure, habitat amount, and the interaction between habitat amount and the two Shannon measures) and the additional covariates (urban cover and average temperature). 
 
-I'm not currently sure about interactions... I think it is useful to include interactions between habitat amount and the two Shannon measures, but my worry here is that the main effect then becomes less interpretable [this was one of my concerns with @Smith2011c, although I think they dealt with it reasonably well]. 
-
-<!---
-I need to properly look into the error structure for the models, because it is proportion data and therefore bounded at 0, 1. For now am incorrectly using normal distribution see [Warton and Hui 2011](http://onlinelibrary.wiley.com/doi/10.1890/10-0340.1/full) for discussion of analysis of proportion data. Normal distribution can be problematic with ratio data unless numerator variance >> denominator variance. In our case, the denominator is always the same, so it should be fine to model with a normal distribution? My main concern is it looks much more like a Poisson distribution (or zero-inflated for 1990 index).
-
-Have decided on binomial regression. The model fit seems much better (in terms of no departures from the assumptions).  
-DELETE WHEN HAPPY TO
---->
-
-Following @Warton2011, I have logit transformed the data (with the smallest non-zero value added to numerator and denominator to account for 0 and 1 in the data). The data will then be modelled using linear regression. This is because the proportions are not strictly binomial and therefore using a binomial error structure does not make sense. 
-
 ```{r global_model}
-mod_global <- lm(index10_logit ~ habitat + winshannon + lsshannon + urban + bio1 + habitat:lsshannon + habitat:winshannon, data = jay_df_t, na.action = na.fail)
+mod_global <- lm(index10_logit ~ habitat + winshannon + lsshannon + urban + bio1 +
+                   habitat:lsshannon + habitat:winshannon, 
+                 data = jay_df_t, na.action = na.fail)
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
@@ -269,11 +229,11 @@ globalr2 = glance(mod_global)$r.square
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
-First model looks to fit my expectation - partial regression coefficient for window-based Shannon is larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
+First model looks to fit expectations - partial regression coefficient for window-based Shannon is larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
 
 The model explains `r round(globalr2*100, 2)`% of the variance in jay abundance. 
 
-Need to check how terrible this model is:
+Check the model specification:
 
 ```{r global_validation, fig.height = 8}
 jay_df_t$resids <- mod_global$residuals
@@ -314,7 +274,7 @@ simpler2 <- glance(mod_simple)$r.squared
 res_simple %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits = 3)
 ```
 
-This model kicks out the interaction between Forest % and MW Shannon. Conclusions remain the same. This model explains `r round(simpler2*100, 2)`% of the variance. 
+This model loses the interaction between Forest % and MW Shannon. Conclusions remain the same. This model explains `r round(simpler2*100, 2)`% of the variance. 
 
 Validation of this model: 
 
@@ -351,22 +311,24 @@ mod_mmi <- dredge(mod_global, beta = "none") %>%
 # mmi averaged estimates
 res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
   left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
-  left_join(mod_mmi %>% importance %>% enframe(name = "variable", value = "importance")) %>% 
+  left_join(mod_mmi %>% importance %>% 
+              enframe(name = "variable", value = "importance")) %>% 
   mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   arrange(fvariable)
 
-res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 2, caption = "Results of model averaging")
+res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% 
+  kable(digits = 2)
 ```
 
-Window-based Shannon measure again coming out as more important than the landscape-based version using both the model averaged partial regression coefficients and the sum of Akaike weights (importance in the above table). 
+MW Shannon measure again coming out as more important than LS Shannon using both the model averaged partial regression coefficients and the sum of Akaike weights (importance in the above table). 
 
 # Plots and summary of main results
 
-The window-based Shannon measure was included in more supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)` than the landscape-based Shannon measure (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and smaller confidence intervals in the global and mmi modelling approaches. LS Shannon was not present in the parsimonious modelling approach. Results for the global model are shown. 
+MW Shannon was included in more supported models (summed Akaike weight = `r res_mmi %>% filter(variable == "winshannon") %>% select(importance) %>% round(2)` than the LS Shannon (summed Akaike weight = `r res_mmi %>% filter(variable == "lsshannon") %>% select(importance) %>% round(2)`). The greater importance of the window-based measure is also demonstrated by its larger absolute effect and smaller confidence intervals in the global and mmi modelling approaches. LS Shannon was not present in the parsimonious modelling approach. Results for the global model are shown. 
 
 ```{r results_out, fig_width = 6.81102}
-# This function lets us calculate the coefficient estimate and 95% CI for one
-# variable at a particular value of the other variable in an interaction
+# This function lets us calculate the coefficient estimate and 95% CI for one variable at
+# a particular value of the other variable in an interaction
 calc_estci <- function(mod_name, variable1, variable2, value) {
   mod <- get(mod_name)
   if (paste0(variable1, ":", variable2) %in% names(mod$coefficients) | 
@@ -380,8 +342,10 @@ calc_estci <- function(mod_name, variable1, variable2, value) {
     var1 <- vcov(mod)[variable1, variable1]
     var2 <- vcov(mod)[variable2, variable2]
     cov_int <- vcov(mod)[variable1, variable2]
-    UCI <- (slope + int_slope * value) + (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
-    LCI <- (slope + int_slope * value) - (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
+    UCI <- (slope + int_slope * value) + 
+      (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
+    LCI <- (slope + int_slope * value) - 
+      (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
     y <- (slope + int_slope * value)
     return(tibble(coef = y, `2.5 %` = LCI, `97.5 %` = UCI))
   } else {
@@ -418,4 +382,6 @@ jay_figure
 save(jay_figure, file = "results/jay_res_figure.Rda")
 ```
 
-# References
+```{r}
+devtools::session_info()
+```

@@ -1,14 +1,13 @@
 ---
-title: "Upscaling power analysis"
-output: html_document
-params:
-  noise: 1
-  n_reps: 20
+title: "Appendix V: Power analysis simulations for correlated variables"
+output: pdf_document
 ---
 
 ```{r setup, include=FALSE, fig.width = 12}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
 
+```{r packages_functions}
 library(broom)
 library(plyr)
 library(tidyverse)
@@ -18,7 +17,8 @@ theme_set(theme_classic())
 # function to generate pairs of uncorrelated variables
 sim_z <- function (n) matrix(c(rnorm(n, 0, 1), rnorm(n, 0, 1)), nrow = n)
 
-# function to convert an uncorrelated pair of variables z to a correlated pair with coefficient r 
+# function to convert an uncorrelated pair of variables z to a correlated pair with
+# coefficient r
 corr_pair <- function(z, r) {
   # create the covariance matrix
   cormat <- matrix(1, nrow = 2, ncol = 2)
@@ -28,22 +28,21 @@ corr_pair <- function(z, r) {
   # calculate the Cholesky decomposition of the covariance matrix 
   ch <- chol(covmat)
   
-  # we can then multiply ch by a set of uncorrelated variables z to get the appropriately correlated variables. 
+  # we can then multiply ch by a set %>% of uncorrelated variables z to get the
+  # appropriately correlated variables.
   y <- z %*% ch
 }
 ```
 
 ## Background
 
-The purpose of these simulations is to determine the conditions under which we are likely to find a difference between the MW and LS version of a variable. The two measures are likely to be highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and therefore it is important that we understand this. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
+The purpose of these simulations is to determine the conditions under which we are likely to find a difference between two correlated variables. The reasoning for this is that is we want to include the window-based upscaling measure and a mean value for the same variable (e.g. MW elevation and mean elevation) in the same analysis, they are often correlated. Additionally, in our paper the MW and LS versions are highly correlated (in our example, the two measures have a correlation coefficient of 0.97) and we need to know that we have the ability to detect the right effect. We are still able to detect the difference between the two approaches because of a large sample size characteristic of macroecological approaches. However, in order to understand wider applicability - and under which circumstances the method is applicable - we will do a simulation to determine, for a given correlation coefficient, at what sample size do you no longer have the ability to detect an effect. 
 
-Will need to think about this for a range of R, a range of n, and also whether there is a change if you introduce a third variable. We will also need to consider different types of effects (what if there is no effect of LS, but effect of MW, or vice versa? or opposite effects). 
-
-Note that while this shows us the conditions under which we are able to detect the differing effects of two correlated variables, I don't believe that it tells us about *when* we should use the MW approach over the LS approach. My argument would be that in general the MW approach should be preferred because this is a more mechanistic way of measuring landscape structure. The useful information these simulations provide is the sample size / correlation coefficient combinations under which one can detect the individual effects of two correlated variables. This is useful for those wishing to include both measures in their analysis. Recommendation would be that if the power does not exist to detect this difference, to include only the MW version. 
+In each of our examples, we will simulate three variables: 2 correlated (x1, x2) and one independent (x3). We Will need to consider a range of R, a range of n, and three classes of effects (1) y ~ x1 + x3, (2) y ~ x1 + x2 + x3, (3) y ~ x1 - x2 + x3. 
 
 ## Predictors
 
-In order to do this, we simulated several sets of predictors of varying sample size and correlation. For each pair of correlated predictors, we also generated a third independent predictor. We therefore have a set of predictors ***X*** where $x_1$ and $x_2$ are correlated, and $x_3$ is independent. The changing parameters in the dataset simulations were:
+In order to do this, we simulated several sets of predictors of varying sample size and correlation. For each pair of correlated predictors (x1, x2), we also generated a third independent predictor (x3). We therefore have a set of predictors ***X*** where $x_1$ and $x_2$ are correlated, and $x_3$ is independent. The changing parameters in the dataset simulations were:
 
 - sample size: 30, 50, 100, 500, 1000 (for now, we may wish to extend)
 - correlation: 0.7, 0.75, 0.8, 0.85, 0.9, 0.95
@@ -53,7 +52,8 @@ For each sample size, we generated 100 replicates.
 ```{r}
 n <- c(30, 50, 100, 250, 500, 750, 1000, 2000, 5000)
 r <- c(0.7, 0.75, 0.8, 0.85, 0.9, 0.95)
-rep <- 1:params$n_reps
+n_reps <- 100
+rep <- 1:n_reps
 
 param_table <- expand.grid(n = n, r = r, rep = rep)
 
@@ -73,52 +73,46 @@ pred_df <- ldply(res)
 
 ## Responses
 
-In order to understand how this differs between models, we will generate response variables for each dataset for the following models:
+In order to understand how the ability to detect an effect might differ between models, we will generate response variables for each dataset for the following models:
 
-- $y = 0.5x_1 + \epsilon$ - only one variable has an effect
-- $y = 0.5x_1 + 0.5x_2 + \epsilon$ - two correlated variables, same effect
-- $y = 0.5x_1 - 0.5x_2 + \epsilon$ - two correlated variables, opposite effect
-- $y = 0.5x_1 + 0.5x_3 + \epsilon$ - two uncorrelated variables (similar to jay)
+- $y = 0.5x_1 + 0.5x_3 + \epsilon$ - two uncorrelated variables (similar to jay case study)
 - $y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$ - two correlated variables, same effect, plus third independent variable
-- $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$ - two correlated variables, opposite effect, plus third independent variable (similar to forests) 
+- $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$ - two correlated variables, opposite effect, plus third independent variable (similar to forests case study) 
 
-In each case here $\epsilon$ has a normal error structure $\epsilon\sim N(0, 1)$. We currently do not consider interaction terms in these simulations. We may wish to extend this and include these, and/or look at variable effect sizes. I'm not sure either are really necessary. 
+In each case here $\epsilon$ has a normal error structure with a reasonable amount of noise in the data $\epsilon\sim N(0, 1)$. We do not consider interaction terms in these simulations.
 
 ```{r}
 df <- pred_df %>% 
-  mutate(y1 = 0.5*x1 + rnorm(n, 0, params$noise),
-         y2 = 0.5*x1 + 0.5*x2 + rnorm(n, 0, params$noise),
-         y3 = 0.5*x1 - 0.5*x2 + rnorm(n, 0, params$noise),
-         y4 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, params$noise),
-         y5 = 0.5*x1 + 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise),
-         y6 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, params$noise))
+  mutate(y1 = 0.5*x1 + 0.5*x3 + rnorm(n, 0, 1),
+         y2 = 0.5*x1 + 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1),
+         y3 = 0.5*x1 - 0.5*x2 + 0.5*x3 + rnorm(n, 0, 1))
 ```
 
 ## Models
 
-For $y_1$ to $y_3$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_2x_2 + \epsilon$. We should not get an effect of $x_2$ for the model fit to $y_1$, the effect should be identical for the model fit to $y_2$ and the effect should be opposite for the model fit to $y_3$. 
+For each response, we fit a linear model of the form:
 
-For $y_4$ to $y_6$, we fit a linear model of the form $y_i = \beta_1x_1 + \beta_2x_2 + \beta_3x_3 + \epsilon$. Our expectations are as above, but with an effect of $x_3$ = 0.5. 
+$y_i = \beta_1x_1 + \beta_2x_2 + \beta_3x_3 + \epsilon$ 
+
+We should get the following results:
+
+- For $y_1$, $\beta_1 = 0.5$, $\beta_2 = 0$, $\beta_3 = 0.5$
+- For $y_2$, $\beta_1 = 0.5$, $\beta_2 = 0.5$, $\beta_3 = 0.5$
+- For $y_3$, $\beta_1 = 0.5$, $\beta_2 = -0.5$, $\beta_3 = 0.5$
 
 We calculate the mean of the estimates and the standard errors across the 100 replicates for final analysis. 
 
 ```{r}
 df_mod <- df %>% group_by(n, r, rep) %>% 
   nest() %>% 
-  mutate(fit1 = map(data, ~ lm(y1 ~ x1 + x2, data = .x)),
-         fit2 = map(data, ~ lm(y2 ~ x1 + x2, data = .x)),
-         fit3 = map(data, ~ lm(y3 ~ x1 + x2, data = .x)),
-         fit4 = map(data, ~ lm(y4 ~ x1 + x2 + x3, data = .x)),
-         fit5 = map(data, ~ lm(y5 ~ x1 + x2 + x3, data = .x)),
-         fit6 = map(data, ~ lm(y6 ~ x1 + x2 + x3, data = .x)),
+  mutate(fit1 = map(data, ~ lm(y1 ~ x1 + x2 + x3, data = .x)),
+         fit2 = map(data, ~ lm(y2 ~ x1 + x2 + x3, data = .x)),
+         fit3 = map(data, ~ lm(y3 ~ x1 + x2 + x3, data = .x)),
          mod1 = map(fit1, tidy),
          mod2 = map(fit2, tidy), 
-         mod3 = map(fit3, tidy),
-         mod4 = map(fit4, tidy),
-         mod5 = map(fit5, tidy),
-         mod6 = map(fit6, tidy)
+         mod3 = map(fit3, tidy)
   ) %>% 
-  select(n, r, rep, mod1, mod2, mod3, mod4, mod5, mod6) %>% 
+  select(n, r, rep, mod1, mod2, mod3) %>% 
   gather(key = model, value = result, -n, -r, -rep) %>% 
   unnest()
 ```
@@ -127,107 +121,13 @@ df_mod <- df %>% group_by(n, r, rep) %>%
 
 We display two plots for each model: 1) the proportion of replicates where the significance of a coefficient was correctly identified (note, for coefficients where the true value is not equal to zero, this is the number of replicates which identify the coefficient as significant, where the true value is zero, this is the number of replicates where the coefficient was correctly estimated to be non-significant); and 2) the distribution of the coefficient estimate for those replicates (out of 100) for which the significance of the estimate is correctly identified (as determined in plot 1). In all cases, the dashed line in plot 2 is at the true value for this coefficient (used to simulate the y value). 
 
-$y_1 = 0.5x_1 + \epsilon$
-
-```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod1", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, 0), term = c("x1", "x2"))) %>% 
-  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
-                            truth == 0 & p.value >= 0.05 ~ "Correct", 
-                            truth != 0 & p.value < 0.05 ~ "Correct", 
-                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
-
-mod_vals <- filter(df, signif == "Correct") %>% 
-  group_by(n, r, model, term, truth) %>% 
-  summarise(mean_estimate = mean(estimate), 
-            se_estimate = sd(estimate)/sqrt(n()))
-  
-mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
-
-ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
-  geom_bar(stat = "identity") + 
-  scale_fill_viridis_d(name = "Significance Identified") + 
-  facet_grid(term ~ n) + 
-  labs(x = "Correlation coefficient", y = "Proportion") 
-
-ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
-  facet_grid(term ~ n, scales = "free") +
-  geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
-```
-
-$y = 0.5x_1 + 0.5x_2 + \epsilon$
-
-```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod2", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, 0.5), term = c("x1", "x2"))) %>% 
-  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
-                            truth == 0 & p.value >= 0.05 ~ "Correct", 
-                            truth != 0 & p.value < 0.05 ~ "Correct", 
-                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
-
-mod_vals <- filter(df, signif == "Correct") %>% 
-  group_by(n, r, model, term, truth) %>% 
-  summarise(mean_estimate = mean(estimate), 
-            se_estimate = sd(estimate)/sqrt(n()))
-  
-mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
-
-ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
-  geom_bar(stat = "identity") + 
-  scale_fill_viridis_d(name = "Significance Identified") + 
-  facet_grid(term ~ n) + 
-  labs(x = "Correlation coefficient", y = "Proportion") 
-
-ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
-  facet_grid(term ~ n, scales = "free") +
-  geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
-```
-
-$y = 0.5x_1 - 0.5x_2 + \epsilon$
-
-```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod3", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, -0.5), term = c("x1", "x2"))) %>% 
-  mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
-                            truth == 0 & p.value >= 0.05 ~ "Correct", 
-                            truth != 0 & p.value < 0.05 ~ "Correct", 
-                            truth != 0 & p.value >= 0.05 ~ "Incorrect"))
-
-mod_vals <- filter(df, signif == "Correct") %>% 
-  group_by(n, r, model, term, truth) %>% 
-  summarise(mean_estimate = mean(estimate), 
-            se_estimate = sd(estimate)/sqrt(n()))
-  
-mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
-
-ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
-  geom_bar(stat = "identity") + 
-  scale_fill_viridis_d(name = "Significance Identified") + 
-  facet_grid(term ~ n) + 
-  labs(x = "Correlation coefficient", y = "Proportion") 
-
-ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
-  geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
-  facet_grid(term ~ n, scales = "free") +
-  geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
-```
+### No effect of second correlated variable
 
 $y = 0.5x_1 + 0.5x_3 + \epsilon$
 
 ```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod4", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, 0, 0.5), term = c("x1", "x2", "x3"))) %>% 
+df <- filter(df_mod, model == "mod1", term != "(Intercept)") %>% 
+  inner_join(tibble(truth = c(0.5, 0, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
                             truth == 0 & p.value >= 0.05 ~ "Correct", 
                             truth != 0 & p.value < 0.05 ~ "Correct", 
@@ -239,7 +139,7 @@ mod_vals <- filter(df, signif == "Correct") %>%
             se_estimate = sd(estimate)/sqrt(n()))
   
 mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
+  summarise(prop = n()/n_reps)
 
 ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
   geom_bar(stat = "identity") + 
@@ -249,17 +149,21 @@ ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) +
 
 ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
   geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, 
+                    ymax = mean_estimate + 1.96*se_estimate)) +
   facet_grid(term ~ n, scales = "free") +
   geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
+  labs(x = "Correlation coefficient", 
+       y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
+
+### Positive effect of second correlated variable
 
 $y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$
 
 ```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod5", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, 0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
+df <- filter(df_mod, model == "mod2", term != "(Intercept)") %>% 
+  inner_join(tibble(truth = c(0.5, 0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
                             truth == 0 & p.value >= 0.05 ~ "Correct", 
                             truth != 0 & p.value < 0.05 ~ "Correct", 
@@ -271,7 +175,7 @@ mod_vals <- filter(df, signif == "Correct") %>%
             se_estimate = sd(estimate)/sqrt(n()))
   
 mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
+  summarise(prop = n()/n_reps)
 
 ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
   geom_bar(stat = "identity") + 
@@ -281,17 +185,21 @@ ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) +
 
 ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
   geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, 
+                    ymax = mean_estimate + 1.96*se_estimate)) +
   facet_grid(term ~ n, scales = "free") +
   geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
+  labs(x = "Correlation coefficient", 
+       y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
 ```
+
+### Negative effect of second correlated variable
 
 $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$
 
 ```{r, fig.width = 12}
-df <- filter(df_mod, model == "mod6", term != "(Intercept)") %>% 
-  inner_join(data.frame(truth = c(0.5, -0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
+df <- filter(df_mod, model == "mod3", term != "(Intercept)") %>% 
+  inner_join(tibble(truth = c(0.5, -0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
                             truth == 0 & p.value >= 0.05 ~ "Correct", 
                             truth != 0 & p.value < 0.05 ~ "Correct", 
@@ -303,7 +211,7 @@ mod_vals <- filter(df, signif == "Correct") %>%
             se_estimate = sd(estimate)/sqrt(n()))
   
 mod_identified <- group_by(df, n, r, term, signif) %>% 
-  summarise(prop = n()/params$n_reps)
+  summarise(prop = n()/n_reps)
 
 ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) + 
   geom_bar(stat = "identity") + 
@@ -313,8 +221,20 @@ ggplot(mod_identified, aes(x = r, y = prop, fill = signif)) +
 
 ggplot(mod_vals, aes(x = r, y = mean_estimate)) + 
   geom_point() + 
-  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, ymax = mean_estimate + 1.96*se_estimate)) +
+  geom_errorbar(aes(ymin = mean_estimate - 1.96*se_estimate, 
+                    ymax = mean_estimate + 1.96*se_estimate)) +
   facet_grid(term ~ n, scales = "free") +
   geom_hline(aes(yintercept = truth), colour = "red") + 
-  labs(x = "Correlation coefficient", y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
+  labs(x = "Correlation coefficient", 
+       y = expression(paste("Mean coefficient estimate " %+-% " 95% CI"))) 
+```
+
+## Conclusion
+
+In all cases, a sample size $\geq 500$ is required to correctly identify the significance and magnitude of an effect at all correlation levels. For correlation $\leq r = 0.9$, this drops to $n = 250$. The majority of macroecological analyses will have sample sizes of this magnitude. 
+
+## Session info
+
+```{r}
+devtools::session_info()
 ```
