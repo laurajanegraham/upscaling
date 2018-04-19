@@ -18,6 +18,7 @@ In the first step, we load all of the required packages. Note that winmoveR (the
 Also required are NLMR and landscapetools:
 
 `devtools::install_github("ropensci/NLMR", ref = "develop")`
+
 `devtools::install_github("ropensci/landscapetools")`
 
 Helper functions `ls_analyse()`, `ls_create()` and `torus_create()` are loaded at this stage, these are available from [put link to zenodo version of repo once created] (for now it's [here](github.com/laurajanegraham/UPSCALING/R)).

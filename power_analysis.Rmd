@@ -3,7 +3,7 @@ title: "Appendix V: Power analysis simulations for correlated variables"
 output: pdf_document
 ---
 
-```{r setup, include=FALSE, fig.width = 12}
+```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
@@ -125,7 +125,7 @@ We display two plots for each model: 1) the proportion of replicates where the s
 
 $y = 0.5x_1 + 0.5x_3 + \epsilon$
 
-```{r, fig.width = 12}
+```{r}
 df <- filter(df_mod, model == "mod1", term != "(Intercept)") %>% 
   inner_join(tibble(truth = c(0.5, 0, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
@@ -161,7 +161,7 @@ ggplot(mod_vals, aes(x = r, y = mean_estimate)) +
 
 $y = 0.5x_1 + 0.5x_2 + 0.5x_3 + \epsilon$
 
-```{r, fig.width = 12}
+```{r}
 df <- filter(df_mod, model == "mod2", term != "(Intercept)") %>% 
   inner_join(tibble(truth = c(0.5, 0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 
@@ -197,7 +197,7 @@ ggplot(mod_vals, aes(x = r, y = mean_estimate)) +
 
 $y = 0.5x_1 - 0.5x_2 + 0.5x_3 + \epsilon$
 
-```{r, fig.width = 12}
+```{r}
 df <- filter(df_mod, model == "mod3", term != "(Intercept)") %>% 
   inner_join(tibble(truth = c(0.5, -0.5, 0.5), term = c("x1", "x2", "x3"))) %>% 
   mutate(signif = case_when(truth == 0 & p.value < 0.05 ~ "Incorrect", 

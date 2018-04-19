@@ -1,5 +1,5 @@
 ---
-title: "Appendix III: *Garrulus glandarius case study"
+title: "Appendix III: *Garrulus glandarius* case study"
 output: pdf_document
 header-includes:
     - \usepackage{booktabs}
@@ -11,9 +11,13 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ## Required packages
 
-In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using `devtools::install_github("laurajanegraham/winmoveR")`
+In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using:
 
-The development version of ggplot2 is required for the spatial plots. Install using `devtools::install_github("tidyverse/ggplot2")`
+`devtools::install_github("laurajanegraham/winmoveR")`
+
+The development version of ggplot2 is required for the spatial plots. Install using:
+
+`devtools::install_github("tidyverse/ggplot2")`
 
 Other options in this section set the order and labels for the variables for plotting and tables. 
 
@@ -120,7 +124,7 @@ What do the variables look like spatially?
 
 ```{r spatial_plot, fig.width = 10}
 load("results/jays_covariates.Rda")
-jay_sp <- filter(jay_sp, index10 != 0)
+jay_sp <- filter(jay_sp, index10 != 0) %>% na.omit
 
 jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -geometry), .funs = funs(scale)) %>% 
@@ -160,7 +164,7 @@ spatial_plot
 
 How are the variables distributed and where are the correlations?
 
-```{r pairs}
+```{r pairs, fig.width = 10, fig.height = 10}
 jay_df <- jay_sp %>% as.tibble %>% select(varorder)
 
 ggpairs(
