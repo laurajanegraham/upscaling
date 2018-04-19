@@ -98,10 +98,10 @@ w2_plot <- ggplot() +
 w3_plot <- ggplot() + 
   geom_raster(data = ls, aes(x = x, y = y, fill = layer)) + 
   geom_raster(data = w3, aes(x = x, y = y), fill = "grey", alpha = 0.7) + 
-  annotate("text", x = 3.5, y = 8.5, label = "italic(f(x))", parse = TRUE, size = 2.5) +
-  annotate("text", x = 0, y = 11.2, hjust = 0, label = "Predictor grain", size = 2.5, colour = "white") +
-  annotate("text", x = 0, y = 12.6, hjust = 0, label = "Scale of effect", size = 2.5, colour = "white") +
-  annotate("text", x = 0, y = 14, hjust = 0, label = "Response grain", size = 2.5, colour = "white") +
+  annotate("text", x = 3.5, y = 8.5, label = "italic(f(x))", parse = TRUE, size = 2.11) +
+  annotate("text", x = 0, y = 11.2, hjust = 0, label = "Predictor grain", size = 2.11, colour = "white") +
+  annotate("text", x = 0, y = 12.6, hjust = 0, label = "Scale of effect", size = 2.11, colour = "white") +
+  annotate("text", x = 0, y = 14, hjust = 0, label = "Response grain", size = 2.11, colour = "white") +
   geom_segment(aes(x=0, xend=1, y=10.5, yend=10.5), size = 0.5,
                arrow = arrow(length = unit(0.1, "cm"), ends = "both"), colour = "white") +
   geom_segment(aes(x=0, xend=3, y=11.9, yend=11.5), size = 0.5,
@@ -117,7 +117,7 @@ method_plot <- plot_grid(w1_plot, w2_plot, w3_plot, nrow = 1, axis = "b")
 
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F1_methods_figure.tiff", 
           method_plot, base_width = 4.33071, base_height = 2.15, dpi = 300)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F1_methods_figure.png", 
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F1_lores_methods_figure.png", 
           method_plot, base_width = 4.33071, base_height = 2.15)
 
 # Figure 2 - Continuous simulations
@@ -156,3 +156,4 @@ save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F6_main_results.ti
           res_figure, base_width = 4.33070866, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F6_main_results.png", 
           res_figure, base_width = 4.33070866)
+
