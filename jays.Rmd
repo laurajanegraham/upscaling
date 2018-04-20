@@ -126,14 +126,14 @@ What do the variables look like spatially?
 load("results/jays_covariates.Rda")
 jay_sp <- filter(jay_sp, index10 != 0) %>% na.omit
 
-jay_narrow <- jay_sp %>% 
+jay_response <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry) %>% 
   mutate(facet = "Relative abundance index")
 
-jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
+jay_plot <- ggplot(jay_response %>% filter(variable == "index10")) + 
   geom_sf(aes(fill = value), colour = NA) +
-  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
+  coord_sf(crs = st_crs(jay_response), datum = NA) + 
   scale_fill_viridis_c(name = "", option = "magma") + 
   facet_wrap(~facet) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), 
@@ -141,25 +141,25 @@ jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) +
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
-covs <- jay_narrow %>% 
+save(jay_plot, file = "results/jays_response_plot.Rda")
+
+jay_covs <- jay_response %>% 
   filter(variable %in% varorder[-1]) %>% 
   mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
-cov_plot <- ggplot(covs) + 
+cov_plot <- ggplot(jay_covs) + 
   geom_sf(aes(fill = value), colour = NA) +
-  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
+  coord_sf(crs = st_crs(jay_covs), datum = NA) + 
   scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), 
         axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
-  
-spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), 
+
+save(cov_plot, file = "results/jays_covs_plot.Rda")  
+
+plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), 
                           label_size = 10, rel_widths = c(1, 1.5))
-
-save(spatial_plot, file = "results/jays_spatial.Rda")
-
-spatial_plot
 ```
 
 How are the variables distributed and where are the correlations?

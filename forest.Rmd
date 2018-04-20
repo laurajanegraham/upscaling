@@ -187,6 +187,8 @@ sp_plot <- ggplot(forests_narrow %>% filter(variable == "sprich")) +
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
 
+save(sp_plot, file = "results/forests_response_plot.Rda")
+
 covs <- forests_narrow %>% 
   filter(variable %in% varorder[-1]) %>% 
   mutate(variable = factor(variable, levels = varorder, labels = varlabel))
@@ -200,12 +202,10 @@ cov_plot <- ggplot(covs) +
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
 
-spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
+save(cov_plot, file = "results/forests_cov_plot.Rda")
+
+plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
                           label_size = 10, rel_widths = c(1, 1.4))
-
-save(spatial_plot, file = "results/forests_spatial.Rda")
-
-spatial_plot
 ```
 
 How are the variables distributed and where are the correlations?

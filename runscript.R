@@ -98,10 +98,10 @@ w2_plot <- ggplot() +
 w3_plot <- ggplot() + 
   geom_raster(data = ls, aes(x = x, y = y, fill = layer)) + 
   geom_raster(data = w3, aes(x = x, y = y), fill = "grey", alpha = 0.7) + 
-  annotate("text", x = 3.5, y = 8.5, label = "italic(f(x))", parse = TRUE, size = 2.11) +
-  annotate("text", x = 0, y = 11.2, hjust = 0, label = "Predictor grain", size = 2.11, colour = "white") +
-  annotate("text", x = 0, y = 12.6, hjust = 0, label = "Scale of effect", size = 2.11, colour = "white") +
-  annotate("text", x = 0, y = 14, hjust = 0, label = "Response grain", size = 2.11, colour = "white") +
+  annotate("text", x = 3.5, y = 8.5, label = "italic(f(x))", parse = TRUE, size = 2.5) +
+  annotate("text", x = 0, y = 11.2, hjust = 0, label = "Predictor grain", size = 2.5, colour = "white") +
+  annotate("text", x = 0, y = 12.6, hjust = 0, label = "Scale of effect", size = 2.5, colour = "white") +
+  annotate("text", x = 0, y = 14, hjust = 0, label = "Response grain", size = 2.5, colour = "white") +
   geom_segment(aes(x=0, xend=1, y=10.5, yend=10.5), size = 0.5,
                arrow = arrow(length = unit(0.1, "cm"), ends = "both"), colour = "white") +
   geom_segment(aes(x=0, xend=3, y=11.9, yend=11.5), size = 0.5,
@@ -121,37 +121,52 @@ save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F1_lores_methods_f
           method_plot, base_width = 4.33071, base_height = 2.15)
 
 # Figure 2 - Continuous simulations
-load("results/contsim_figure.Rda")
+load("results/contsim_ls_plot.Rda")
+load("results/contsim_results_plot.Rda")
+
+cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
+
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F2_contsim_figure.tiff", 
           cont_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F2_lores_contsim_figure.png", 
           cont_figure, base_width = 4.33071)
 
 # Figure 3 - Categorical simulations
-load("results/catsim_figure.Rda")
+load("results/catsim_ls_plot.Rda")
+load("results/catsim_results_plot.Rda")
+
+cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, rel_widths = c(2, 1))
+
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F3_catsim_figure.tiff", 
           cat_figure, base_width = 4.33071, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F3_lores_catsim_figure.png", 
           cat_figure, base_width = 4.33071)
 
 # Figure 4 - Jay data
-load("results/jays_spatial.Rda")
+load("results/jays_covs_plot.Rda")
+load("results/jays_response_plot.Rda")
+
+jay_spatial_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), label_size = 7, rel_widths = c(1, 1.5))
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F4_jays_data_figure.tiff", 
-          spatial_plot, base_width = 6.81102, dpi = 300)
+          jay_spatial_plot, base_width = 6.81102, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F4_lores_jays_data_figure.png", 
-          spatial_plot, base_width = 6.81102)
+          jay_spatial_plot, base_width = 6.81102)
 
 # Figure 5 - Forests data
-load("results/forests_spatial.Rda")
+load("results/forests_cov_plot.Rda")
+load("results/forests_response_plot.Rda")
+
+forest_spatial_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"), label_size = 7, rel_widths = c(1, 1.5))
+
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F5_forests_data_figure.tiff", 
-          spatial_plot, base_width = 6.81102, dpi = 300)
+          forest_spatial_plot, base_width = 6.81102, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F5_lores_forests_data_figure.png", 
-          spatial_plot, base_width = 6.81102)
+          forest_spatial_plot, base_width = 6.81102)
 
 # Figure 6 - main results
 load("results/jays_res_figure.Rda")
 load("results/forests_res_figure.Rda")
-res_figure <- plot_grid(jay_figure, forest_figure, nrow = 2, labels = c("a)", "b)"), label_size = 10, hjust = 0)
+res_figure <- plot_grid(jay_figure, forest_figure, nrow = 2, labels = c("a)", "b)"), label_size = 7, hjust = 0)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F6_main_results.tiff", 
           res_figure, base_width = 4.33070866, dpi = 300)
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F6_main_results.png", 

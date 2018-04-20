@@ -76,6 +76,7 @@ cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) +
   theme(strip.background = element_blank(), strip.text.x = element_blank(), 
         legend.position = "none")
 
+save(cont_ls_plot, file = "results/contsim_ls_plot.Rda")
 cont_ls_plot
 ```
 
@@ -99,9 +100,9 @@ cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) +
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Variance")
 
-cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
-save(cont_figure, file = "results/contsim_figure.Rda")
-cont_figure
+save(cont_res_plot, file = "results/contsim_results_plot.Rda")
+
+plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
 ```
 
 Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
@@ -141,6 +142,8 @@ cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) +
   theme(strip.background = element_blank(),strip.text.x = element_blank(), 
         legend.position = "none")
 
+save(cat_ls_plot, file = "results/catsim_ls_plot.Rda")
+
 cat_ls_plot
 ```
 
@@ -164,9 +167,9 @@ cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) +
   facet_wrap(~roughness, ncol = 1) +
   xlab("Moving window size") + ylab("MW Shannon") 
 
-cat_figure <- plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
-save(cat_figure, file = "results/catsim_figure.Rda")
-cat_figure
+save(cat_res_plot, file = "results/catsim_results_plot.Rda")
+
+plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
 ```
 
 Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
