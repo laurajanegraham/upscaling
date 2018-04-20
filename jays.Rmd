@@ -45,7 +45,7 @@ theme_set(theme_classic() + theme(strip.background = element_blank()))
 # for exploratory plotting
 varorder <- c("index10", "winshannon", "lsshannon", "habitat", "urban", "bio1")
 
-varlabel <- c("Abundance (2010 Atlas)", "MW Shannon", "LS Shannon", 
+varlabel <- c("Abundance (2010 Atlas)", "MW Shannon\n(1km)", "LS Shannon", 
               "Forest %", "Urban %", "Temperature")
 
 # for initial tables from models
@@ -53,7 +53,7 @@ coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat",
                "habitat:winshannon", "habitat:lsshannon",
                "urban", "bio1")
 
-coefflabel <- c("Intercept", "MW Shannon", "LS Shannon", "Forest %", 
+coefflabel <- c("Intercept", "MW Shannon (1km)", "LS Shannon", "Forest %", 
                     "Forest % : MW Shannon", "Forest % : LS Shannon", 
                     "Urban %", "Temperature")
 ```
@@ -369,7 +369,8 @@ figure1_df <- tibble(mod = "mod_global",
   bind_rows(res_global %>% mutate(type = "mean") %>% select(-fvariable)) %>%
   filter(variable != "(Intercept)") %>%
   filter(!str_detect(variable, "habitat:")) %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel),
+  mutate(variable = factor(variable, levels = coefforder, 
+                           labels = gsub("\n", " ", coefflabel)),
          type = factor(type, levels = c("low", "mean", "high"))) %>%
   na.omit
 

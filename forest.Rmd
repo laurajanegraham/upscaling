@@ -49,7 +49,7 @@ varlabel <- c("Species richness", "MW Elevation (2km)", "LS Elevation", "Mean El
 coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", 
                 "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
 
-coefflabel <- c("(Intercept)", "MW elevation", "LS elevation", "Mean elevation", 
+coefflabel <- c("(Intercept)", "MW elevation\n(2km)", "LS elevation", "Mean elevation", 
                 "Mean elevation : MW elevation", "Mean elevation : LS elevation", 
                 "Temperature", "Precipitation", "Precipitation\nseasonality", 
                 "Temperature\n(quadratic)", "Precipitation\n(quadratic)")

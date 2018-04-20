@@ -38,15 +38,13 @@ library(tidyverse)
 # analyses and should be shared as supplementary material (in addition, the
 # repository for the analysis and the package will be put on zenodo as a
 # snapshot)
-rmarkdown::render("supp_mat.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S1_supp_mat.pdf", envir = new.env())
 rmarkdown::render("simulations.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S2_simulations.pdf", envir = new.env())
 rmarkdown::render("jays.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S3_jay.pdf", envir = new.env())
 rmarkdown::render("forest.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S4_forest.pdf", envir = new.env())
 rmarkdown::render("power_analysis.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S5_power_analysis.pdf", envir = new.env())
-
+rmarkdown::render("supp_mat.Rmd", output_file = "~/Google Drive/SCALEFORES/Papers/Upscaling/supp_mat/S1_supp_mat.pdf", envir = new.env())
 
 # Figures ----
-library(ggplot2)
 library(cowplot)
 
 # set the theme (incl. font size) for the figures for the paper

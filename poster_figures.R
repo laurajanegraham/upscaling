@@ -107,4 +107,4 @@ load("results/contsim_results_plot.Rda")
 
 cont_figure <- plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
 
-save_plot(paste0(out_path, "/contsim_figure.tiff"), cont_figure, base_width = 7.87402, base_height = 7.87402, dpi = 300)
+save_plot(paste0(out_path, "/contsim_figure.tiff"), cont_figure, base_width = 8.0354331, base_height = 5.8149606, dpi = 300)
