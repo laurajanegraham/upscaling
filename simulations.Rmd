@@ -11,21 +11,16 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ## Required packages
 
-In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using:
+In the first step, we load all of the required packages. Note that grainchanger (the package developed for this paper) can be installed using:
 
-`devtools::install_github("laurajanegraham/winmoveR")`
-
-Also required are NLMR and landscapetools:
-
-`devtools::install_github("ropensci/NLMR", ref = "develop")`
-
-`devtools::install_github("ropensci/landscapetools")`
+`devtools::install_github("laurajanegraham/grainchanger")`
 
 Helper functions `ls_analyse()`, `ls_create()` and `torus_create()` are loaded at this stage, these are available from [put link to zenodo version of repo once created] (for now it's [here](github.com/laurajanegraham/UPSCALING/R)).
 
 ```{r setup}
 # load required libraries
-library(winmoveR)
+library(raster)
+library(grainchanger)
 library(plyr)
 library(landscapetools)
 library(NLMR)
@@ -45,25 +40,32 @@ This simulation shows the use of the moving window based spatial structure measu
 
 ### Simulated landscapes
 
-We simulated landscapes using the mid-point displacement method (`nlm_mpd`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `roughness` parameter where a value of zero is a clustered landscape, and a value of one is a rough landscape. We generated landscapes of 65 x 65 cells using roughness = 0, 0.5, 1. We scaled each landscape to have a mean of zero, and a variance of one in order to facilitate comparison between landscapes. Example landscapes for each level of roughness are shown below. 
+We simulated landscapes using the fractal Brownian motion method (`nlm_fbm`) from the `NLMR` package [@Sciaini2018]. We simulated landscapes with three levels of spatial autocorrelation, and 100 replicates for each of these. The spatial autocorrelation of the landscape is controlled by the `fract_dim` parameter where a value close to zero is a rough landscape (random), and a value of one is a smooth landscape (spatially autocorrelated). We generated landscapes of 65 x 65 cells using roughness = 0.01, 0.5, 1 and min-max scaled to allow comparison between landscapes. Example landscapes for each fractal dimension value are shown below. 
 
 ```{r sim_ls}
 nrows <- ncols <- 65
-roughness <- c(0, 0.5, 1)
+fract_dim <- c(0.1, 0.5, 1)
 radius <- c(1, 7, 17)
 reps <- 1:100
 
 # set up a table with all combinations of parameters
-param_table <- expand.grid(ncol = ncols, nrow = nrows, roughness = roughness, 
-                           radius = radius, reps = reps)
+params <- expand.grid(ncol = ncols, nrow = nrows, fract_dim = fract_dim, reps = reps)
 
-# simulate 65 x 65 landscapes with mean = 0, variance = 1 and variable roughness
-sim_ls <- apply(param_table, 1, function(x) ls_create(x))
+# simulate 65 x 65 landscapes with variable roughness
+sim_ls <- apply(params, 1, function(x) {
+  ls <- nlm_fbm(ncol = x['ncol'], 
+          nrow = x['nrow'], 
+          fract_dim = as.numeric(x['fract_dim']), 
+          rescale = TRUE)
+  ls_df <- raster::as.data.frame(ls, xy = TRUE) %>% 
+    cbind(x %>% as.data.frame %>% t, row.names = NULL)
+  return(list(params = x, ls = ls, ls_df = ls_df))
+})
 
 # combine all runs into one dataframe and only take the first replicate of each
 # combination for plotting
 cont_ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
-  filter(reps == 1, radius == 1)
+  filter(reps == 1)
 
 # plot example landscapes
 cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) + 
@@ -72,7 +74,7 @@ cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) +
   scale_fill_viridis_c(name = "Continuous variable") + 
   theme(axis.text = element_blank(), axis.title = element_blank(), 
         axis.line = element_blank(), axis.ticks = element_blank()) + 
-  facet_wrap(~roughness, ncol = 1) + 
+  facet_wrap(~fract_dim, ncol = 1) + 
   theme(strip.background = element_blank(), strip.text.x = element_blank(), 
         legend.position = "none")
 
@@ -80,38 +82,58 @@ save(cont_ls_plot, file = "results/contsim_ls_plot.Rda")
 cont_ls_plot
 ```
 
-### Use winmover function
+### Use grainchanger functions
 
-We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
+We used the `winmove` function from the [`grainchanger`](https://github.com/laurajanegraham/grainchanger) package to gain a moving-window based range and variance of the continuous variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. For the variance calculation, we scaled the landscapes to have a mean of 0 and variance of 1. 
 
 ```{r contsim_winmove}
-cont_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "var")) %>% 
+cont_res <- ldply(sim_ls, function(x) {
+  ls <- x$ls 
+  ldply(radius, function(r) {
+    ls_pad <- torus_create(ls, r)
+    # scale to make variance identical across landscapes
+    mw_var <- winmove(raster::scale(ls_pad), radius = r, type = "rectangle", fn = "var")
+    mw_var <- raster::trim(mw_var) 
+    mw_range <- winmove(ls_pad, radius = r, type = "rectangle", fn = "var_range")
+    mw_range <- raster::trim(mw_range) 
+    out <- data.frame(t(x$params), 
+                      radius = r, 
+                      val = c(mw_var %>% values %>% mean,
+                              mw_range %>% values %>% mean),
+                      measure = c("Variance", "Range"))
+  })
+}) %>% 
   mutate(radius = factor(radius, 
-                         labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
-         roughness = factor(paste0("Roughness = ", roughness)))
+                         labels = c("Small: 3 x 3", 
+                                    "Medium: 15 x 15", 
+                                    "Large: 35 x 35")), 
+         fract_dim = factor(paste0("Fractal dimension = ", fract_dim)))
 ```
 
 
 ### Results
 
 ```{r contsim_results}
-cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val)) + 
+cont_res_plot <- ggplot(cont_res, aes(x = radius, y = val, colour = measure)) + 
   geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
-  facet_wrap(~roughness, ncol = 1) +
-  xlab("Moving window size") + ylab("MW Variance")
+  facet_wrap(~fract_dim, ncol = 1) +
+  xlab("Moving window size") + ylab("MW Environmental Heterogeneity")
 
 save(cont_res_plot, file = "results/contsim_results_plot.Rda")
 
 plot_grid(cont_res_plot, cont_ls_plot, rel_widths = c(2, 1))
 ```
 
-Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+Results of the moving window analysis of continuous variables for simulated landscapes. Variance within moving windows was calculated at three scales. Note that the landscape scale measure is 1 in all cases. 
 
 We used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. We focus on the effect size rather than the statistical significance due to the inflated sample size in simulated data. 
 
 ```{r}
-cont_aov <- aov(val ~ roughness * radius, data = cont_res)
-broom::tidy(cont_aov)
+cont_var_aov <- aov(val ~ fract_dim * radius, data = cont_res %>% filter(measure == "Variance"))
+broom::tidy(cont_var_aov)
+
+cont_range_aov <- aov(val ~ fract_dim * radius, data = cont_res %>% filter(measure == "Range"))
+broom::tidy(cont_range_aov)
 ```
 
 ## Simulation Two: categorical variables
@@ -129,7 +151,7 @@ cat_ls_df <- ldply(sim_ls, function(x) {
   return(data.frame(t(x$params), ls_df))
 }
 ) %>% 
-  filter(reps == 1, radius == 1)
+  filter(reps == 1)
 
 # plot example landscapes
 cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) + 
@@ -138,7 +160,7 @@ cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) +
   scale_fill_viridis_c() + 
   theme(axis.text = element_blank(), axis.title = element_blank(), 
         axis.line = element_blank(), axis.ticks = element_blank()) + 
-  facet_wrap(~roughness, ncol = 1) + 
+  facet_wrap(~fract_dim, ncol = 1) + 
   theme(strip.background = element_blank(),strip.text.x = element_blank(), 
         legend.position = "none")
 
@@ -149,36 +171,64 @@ cat_ls_plot
 
 ### Use winmover function
 
-We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain a moving-window based Shannon evenness of the categorical variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
+We used the `winmove` function from the [`winmoveR`](https://github.com/laurajanegraham/winmoveR) package to gain moving-window based environmental heterogeneity measures (Shannon evenness and land cover richness) of the categorical variable at 3 different window sizes: 3 x 3 = small; 15 x 15 = medium; 35 x 35 = large. The window sizes represent the appropriate scale of effect of the continuous variable on the response. 
 
 ```{r catsim_winmove}
-cat_res <- ldply(sim_ls, function(x) ls_analyse(x, fn = "diversity", lc_class = 0:2)) %>% 
+cat_res <- ldply(sim_ls, function(x) {
+  ls <- util_classify(x$ls, weighting = rep(1/3, 3))
+  ldply(radius, function(r) {
+    ls_pad <- torus_create(ls, r)
+    # calculate shannon evenness
+    mw_shei <- winmove(ls_pad, 
+                       radius = r, 
+                       type = "rectangle", 
+                       fn = "diversity", 
+                       lc_class = 0:2)
+    mw_shei <- raster::trim(mw_shei) 
+    # calculate patch richness index (pr / # landcovers)
+    mw_pr <- winmove(ls_pad, 
+                     radius = r, 
+                     type = "rectangle", 
+                     fn = "diversity",
+                     index = "pr",
+                     lc_class = 0:2)
+    mw_pr <- raster::trim(mw_pr/3) # divide by number of landcovers to get value from 0:1
+    out <- data.frame(t(x$params), 
+                      radius = r, 
+                      val = c(mw_shei %>% values %>% mean,
+                              mw_pr %>% values %>% mean),
+                      measure = c("Shannon evenness", "LC richness"))
+  })
+}) %>% 
   mutate(radius = factor(radius, 
                          labels = c("Small: 3 x 3", "Medium: 15 x 15", "Large: 35 x 35")), 
-         roughness = paste0("Roughness = ", roughness))
+         fract_dim = paste0("Fractal dimension = ", fract_dim))
 ```
 
 
 ### Results
 
 ```{r catsim_results}
-cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val)) + 
+cat_res_plot <- ggplot(cat_res, aes(x = radius, y = val, colour = measure)) + 
   geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
-  facet_wrap(~roughness, ncol = 1) +
-  xlab("Moving window size") + ylab("MW Shannon") 
+  facet_wrap(~fract_dim, ncol = 1) +
+  xlab("Moving window size") + ylab("MW Environmental Heterogeneity") 
 
 save(cat_res_plot, file = "results/catsim_results_plot.Rda")
 
 plot_grid(cat_res_plot, cat_ls_plot, align = 'h', rel_widths = c(2, 1))
 ```
 
-Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness within moving windows was calculated at three scales. Note that the landscape scale variance is 1 in all cases. 
+Results of the moving window analysis of categorical variables for simulated landscapes. Shannon evenness and patch richness index within moving windows was calculated at three scales. Note that the landscape scale measure is 1 in all cases. 
 
 Again, we used a two-way analysis of variance in order to understand the effect of spatial structure in the landscape and the size of the moving window on the output measure. 
 
 ```{r}
-cat_aov <- aov(val ~ roughness * radius, data = cat_res)
-broom::tidy(cat_aov)
+cat_aov_shei <- aov(val ~ fract_dim * radius, data = cat_res %>% filter(measure == "Shannon evenness"))
+broom::tidy(cat_aov_shei)
+
+cat_aov_pr <- aov(val ~ fract_dim * radius, data = cat_res %>% filter(measure == "Shannon evenness"))
+broom::tidy(cat_aov_shei)
 ```
 
 ## Session Info

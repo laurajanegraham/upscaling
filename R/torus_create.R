@@ -34,6 +34,7 @@ torus_create <- function(ls, r) {
   
   #   4. convert to raster
   ls_pad <- raster::raster(ls_pad_m)
+  
   #   5. Fix resolution
   # specify resolution ----
   raster::extent(ls_pad) <- c(
