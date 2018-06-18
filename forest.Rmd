@@ -11,19 +11,17 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 ## Required packages
 
-In the first step, we load all of the required packages. Note that winmoveR (the package developed for this paper) can be installed using:
+In the first step, we load all of the required packages. Note that grainchanger (the package developed for this paper) can be installed using:
 
-`devtools::install_github("laurajanegraham/winmoveR")`
-
-The development version of ggplot2 is required for the spatial plots. Install using:
-
-`devtools::install_github("tidyverse/ggplot2")`
+`devtools::install_github("laurajanegraham/grainchanger")`
 
 Other options in this section set the order and labels for the variables for plotting and tables. 
 
 ```{r setup}
+library(car)
+library(perturb)
 library(MASS)
-library(winmoveR)
+library(grainchanger)
 library(raster)
 library(rgdal)
 library(rgeos)
@@ -38,26 +36,28 @@ library(stringr)
 library(DHARMa)
 library(tidyverse)
 
+source("R/ca_glm.R")
+
 # set up plotting options
 theme_set(theme_classic() + theme(strip.background = element_blank()))
 
-varorder <- c("sprich", "winvar2000", "elevvar", "elevmean", "bio1", "bio12", "bio15")
+varorder <- c("sprich", "winrange500", "elevrange", "elevmean", "bio1", "bio12", "bio15")
 
-varlabel <- c("Species richness", "MW Elevation (2km)", "LS Elevation", "Mean Elevation", 
+varlabel <- c("Species richness", "MW Elevation (500m)", "LS Elevation", "Mean Elevation", 
               "Temperature", "Precipitation", "Precip. seasonality")
 
-coefforder <- c("(Intercept)", "winvar2000", "elevvar", "elevmean", "elevmean:winvar2000", 
+coefforder <- c("(Intercept)", "winrange500", "elevrange", "elevmean", "elevmean:winvar500", 
                 "elevmean:elevvar", "bio1", "bio12", "bio15", "I(bio1^2)", "I(bio12^2)")
 
-coefflabel <- c("(Intercept)", "MW elevation\n(2km)", "LS elevation", "Mean elevation", 
+coefflabel <- c("(Intercept)", "MW elevation\n(500m)", "LS elevation", "Mean elevation", 
                 "Mean elevation : MW elevation", "Mean elevation : LS elevation", 
                 "Temperature", "Precipitation", "Precipitation\nseasonality", 
                 "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
 ```
 
-# Data
+## Data
 
-## EU forest data
+### EU forest data
 
 First we need to load in and spatialise the EU forest data: available for download from [figshare](https://ndownloader.figshare.com/files/6662535).
 
@@ -73,11 +73,11 @@ forests <- SpatialPointsDataFrame(forests[,1:2], forests[,3],
                                   proj4string = crs(eu_crs))
 ```
 
-## Environmental data
+### Environmental data
 
 Analyses will be at 0.5 degree resolution. The data to be upscaled are the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). By cropping all datasets to the extent of the EU elevation data, we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. We aggregate the elevation to 100m (from 25m) for ease of computation.
 
-We will use the moving window to upscale the variation in elevation using a radius of 2km. We will also calculate variation in elevation at 0.5 degree resolution. As covariates, we  calculated average temperature and precipitation at 0.5 degree resolution. 
+We will use the moving window to upscale the variation in elevation using a radius of 500 m. We will also calculate variation in elevation at 0.5 degree resolution. As covariates, we  calculated average temperature and precipitation at 0.5 degree resolution. 
 
 ```{r envdata, eval = FALSE}
 # This section only gets run the first time (or if changed) and the output saved to file.
@@ -88,10 +88,9 @@ wc_bio <- getData('worldclim', var = "bio", res = 10, path = "~/DATA/CLIMATE/wor
 wc_bio_30 <- aggregate(wc_bio, fact = 3)
 
 # load in the elevation data
-elev <- raster("~/DATA/PHYSICAL/elev/eu_dem/eudem_dem_3035_europe.tif")
+elev <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_dem_3035_europe.tif")
 
-
-# get forest and climate data in same projection as elev and crop worldclim data by the EU
+# get %>% forest and climate data in same projection as elev and crop worldclim data by the EU
 # forest dataset
 forests <- spTransform(forests, crs(elev))
 wc_bio_30 <- projectRaster(wc_bio_30, crs = crs(elev))
@@ -123,7 +122,7 @@ elev_cell_100 <- list()
 
 for(cell_no in 1:length(eu_grid)) {
   fname <- paste0('temp_raster/temp_agg_',cell_no, '.tif'
-  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4, 
+  elev_cell_100[[cell_no]] <- agg_cell(eu_grid, elev, cell_no, 4,
                                        filename=fname), overwrite=TRUE)
 }
 
@@ -137,22 +136,36 @@ rasters.mosaicargs$na.rm <- TRUE
 
 elev_100 <- do.call("mosaic", rasters.mosaicargs)
 
+
+
 # create the grid level covariates
-eu_grid$elevvar <- nomove_upscale(grid = eu_grid, dat = elev_100, 
+eu_grid$elevvar <- nomove_agg(grid = eu_grid, dat = elev_100, 
                                   fn = "var", na.rm = TRUE)
 
-eu_grid$elevmean <- nomove_upscale(grid = eu_grid, dat = elev_100, 
+eu_grid$elevmean <- nomove_agg(grid = eu_grid, dat = elev_100, 
                                    fn = "mean", na.rm = TRUE)
+
+eu_grid$elevrange <- nomove_agg(grid = eu_grid, dat = elev_100, 
+                                fn = "var_range", na.rm = TRUE)
 
 # upscale the eu elevation data using the moving window approach
 strt <- Sys.time()
-eu_grid$winvar2000 <- winmove_upscale(eu_grid, elev_100, 2000, 
+eu_grid$winvar500 <- winmove_agg(eu_grid, elev_100, 500, 
                                         "rectangle", "var")
+save(eu_grid, file = "temp.Rda")
 run_time <- difftime(Sys.time(), strt, units = "mins")
 
 save(run_time, file = "results/forests_runtime.Rda")
 
-forests_pts <- spTransform(gCentroid(eu_grid, byid=TRUE), crs(elev))
+strt <- Sys.time()
+eu_grid$winrange500 <- winmove_agg(eu_grid, elev_100, 500, 
+                                        "rectangle", "var_range")
+save(eu_grid, file = "temp.Rda")
+range_run_time <- difftime(Sys.time(), strt, units = "mins")
+
+save(range_run_time, file = "results/forests_range_runtime.Rda")
+
+forests_pts <- spTransform(gCentroid(eu_grid, byid=TRUE), crs(elev_100))
 
 forests_sp <- st_as_sf(eu_grid) %>% 
   bind_cols(raster::extract(wc_bio_eu, forests_pts) %>% as.tibble) %>% 
@@ -163,14 +176,18 @@ save(forests_sp, file="results/forests_covariates.Rda")
 
 
 `r load("results/forests_runtime.Rda")`
-Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 2km radius window took:  `r round(run_time, 2)` minutes. 
+Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 500 m radius window took:  `r round(run_time, 2)` minutes. 
 
-## Exploration and transformation
+```{r reload_data}
+load("results/forests_covariates.Rda")
+forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit
+```
+
+### Exploration and transformation
 
 What do the variables look like spatially?
 
 ```{r spatial_plot, fig.width = 10}
-load("results/forests_covariates.Rda")
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
@@ -211,8 +228,6 @@ plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
 How are the variables distributed and where are the correlations?
 
 ```{r pairs, fig.width = 10, fig.height = 10}
-forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit
-
 ggpairs(
   forests_df %>% select(varorder), 
   upper = list(
@@ -227,16 +242,16 @@ MW Elevation is the lowest correlation except for total precipitation (bio12). H
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
-c.winvar2000 <- optimise(skew.score, c(0, 20), x = forests_df$winvar2000)$minimum
-c.elevvar <- optimise(skew.score, c(0, 20), x = forests_df$elevvar)$minimum
+c.winrange500 <- optimise(skew.score, c(0, 20), x = forests_df$winrange500)$minimum
+c.elevrange <- optimise(skew.score, c(0, 20), x = forests_df$elevrange)$minimum
 c.elevmean <- optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum
 c.bio12 <- optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum
 c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
 
 
 forests_df_t <- select(forests_df, varorder) %>% 
-  mutate(winvar2000 = log(winvar2000 + c.winvar2000),
-         elevvar = log(elevvar + c.elevvar),
+  mutate(winrange500 = log(winrange500 + c.winrange500),
+         elevrange = log(elevrange + c.elevrange),
          elevmean = log(elevmean + c.elevmean),
          bio12 = log(bio12 + c.bio12),
          bio15 = log(bio15 + c.bio15))
@@ -256,17 +271,17 @@ scale_this <- function(x) as.vector(scale(x))
 forests_df_t <- mutate_at(forests_df_t, .vars = vars(-sprich), .funs = funs(scale_this))
 ```
 
-# Models
+# Statistical model
 
-For each model, our sample size is n = `r nrow(forests_df_t)`. 
+Our sample size is n = `r nrow(forests_df_t)`. 
 
-## Global model
+Our model contains the following variables: MW Elevation, LS Elevation, mean elevation, temperature, temperature quadratic term, precipitation, precipitation quadratic term, and precipitation seasonality. We are including the quadratic terms for temperature and precipitation, due to the shape of the relationship between these variables (and based on some earlier residual diagnostics). We also include the interaction term between mean elevation and the MW & LS elevation variables. 
 
-We are including the quadratic term for temperature (bio1) and precipitation (bio12), due to the shape of the relationship between these variables (and based on some earlier residual diagnostics)
+The model is fit to a negative binomial distribution due to overdispersion (based on earlier diagnostics). 
 
-```{r global_model}
-mod_global <- glm.nb(sprich ~ elevmean + winvar2000 + elevvar + elevmean:winvar2000 +
-                       elevmean:elevvar + bio1 + I(bio1^2) + bio12 + I(bio12^2) + bio15, 
+```{r model}
+mod_global <- glm.nb(sprich ~ elevmean + winrange500 + elevrange + bio1 + 
+                       I(bio1^2) + bio12 + I(bio12^2) + bio15, 
                      data = forests_df_t, na.action = na.fail)
 
 res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
@@ -275,26 +290,26 @@ res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef")
                             labels = gsub("\n", " ", coefflabel))) %>%
   arrange(fvariable) 
 
-globalr2 <- round((1 - (mod_global$deviance / mod_global$null.deviance))*100, 2)
+globalr2 <- 1 - (mod_global$deviance / mod_global$null.deviance)
 
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
-There is a negative effect of local-scale (2km) variation in elevation (MW Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
+There is a negative effect of local-scale (500 m) variation in elevation (MW Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
 
-This model explains `r globalr2`% of the deviance in tree species richness. This was calculated using D-squared. 
+This model explains `r round(globalr2*100, 2)`% of the deviance in tree species richness. This was calculated using D-squared. 
 
 Check the model specification using the DHARMa package. 
 
-```{r global_validation, fig.height = 8}
+```{r validation, fig.height = 8}
 simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
 plotSimulatedResiduals(simulationOutput)
 
-plotResiduals(forests_df_t$winvar2000, 
+plotResiduals(forests_df_t$winrange500, 
               simulationOutput$scaledResiduals, 
-              xlab = "MW elevation (2km)")
+              xlab = "MW elevation (500m)")
 
-plotResiduals(forests_df_t$elevvar, 
+plotResiduals(forests_df_t$elevrange, 
               simulationOutput$scaledResiduals, 
               xlab = "LS elevation")
 
@@ -317,94 +332,22 @@ plotResiduals(forests_df_t$bio15,
 
 Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms.
 
-## Parsimonious model
-
-This model is determined using stepwise selection. 
-
-```{r simple_model, message = TRUE}
-mod_simple <- step(mod_global)
-
-res_simple <- mod_simple %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable)
-simplep <- glance(mod_simple)$p.value
-simpler2 <- glance(mod_simple)$r.squared
-
-res_simple %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
-```
-
-Full model retained. 
-
-## Model average in MMI framework
-
-Now to get the model averaged and variable importance estimates. We are using `dredge` to get the full list of models, then `model.avg` to get the estimates for the 95% confidence set. 
-
-```{r mmi_model, eval = FALSE}
-mod_mmi <- dredge(mod_global, beta = "none") %>% 
-  model.avg(subset = cumsum(weight) <= 0.95)
-
-# mmi averaged estimates
-res_mmi <- mod_mmi %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_mmi %>% confint %>% as_tibble(rownames = "variable")) %>%
-  left_join(mod_mmi %>% importance %>% 
-              enframe(name = "variable", value = "importance")) %>% 
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable)
-
-res_mmi %>% select(fvariable, coef, `2.5 %`, `97.5 %`, importance) %>% kable(digits = 3)
-```
-
-Only the global model was contained within the 95% confidence set, therefore all variables were determined to be of equal importance. 
-
 # Plots and summary of main results
 
 MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, MW elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured. The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong.
 
 ```{r results_out}
-# This function lets us calculate the coefficient estimate and 95% CI for one variable at
-# a particular value of the other variable in an interaction
-calc_estci <- function(mod, variable1, variable2, value) {
-  mod <- get(mod)
-  slope <- coef(mod)[variable1]
-  # catch it so either order will work
-  int_slope <- coef(mod)[paste0(variable1, ":", variable2)]
-  if(is.na(int_slope)) {
-    int_slope <- coef(mod)[paste0(variable2, ":", variable1)]
-  }
-  var1 <- vcov(mod)[variable1, variable1]
-  var2 <- vcov(mod)[variable2, variable2]
-  cov_int <- vcov(mod)[variable1, variable2]
-  UCI <- (slope + int_slope * value) + 
-    (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
-  LCI <- (slope + int_slope * value) - 
-    (1.9602 * sqrt(var1 + (2 * value * cov_int) + ((value^2) * var2)))
-  y <- (slope + int_slope * value)
-  return(tibble(coef = y, `2.5 %` = LCI, `97.5 %` = UCI))
-}
-
 # The first line creates a dataframe of the variables to calculate interaction for
-figure1_df <- tibble(mod = "mod_global", 
-                     variable1 = c(rep("winvar2000", 2), rep("elevvar", 2)),
-                     variable2 = "elevmean", value = c(-1, 1, -1, 1)) %>%
-  bind_cols(pmap_df(., calc_estci)) %>%
-  inner_join(tibble(value = c(-1, 1), type = c("low", "high"))) %>%
-  select(variable = variable1, type, coef, `2.5 %`, `97.5 %`) %>% 
-  bind_rows(res_global %>% mutate(type = "mean") %>% select(-fvariable)) %>%
+figure1_df <- res_global %>% mutate(type = "mean") %>% select(-fvariable) %>%
   filter(variable != "(Intercept)") %>%
-  filter(!str_detect(variable, "elevmean:")) %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel),
-         type = factor(type, levels = c("low", "mean", "high"))) %>%
+  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
   na.omit
 
 pd <- position_dodge(0.5)
 
-forest_figure <- ggplot(figure1_df, aes(x = variable, y = coef, colour = type)) + 
-  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`, colour = type), width=0.2, position=pd) +
+forest_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) + 
+  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`), width=0.2, position=pd) +
   geom_point(position = pd) +
-  scale_color_manual(values = c("grey", "black", "grey")) +
   geom_hline(yintercept = 0, linetype = "dotted") + 
   ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
   xlab("") + theme(legend.position = "none")
@@ -414,7 +357,226 @@ forest_figure
 save(forest_figure, file = "results/forests_res_figure.Rda")
 ```
 
-## Session Info
+## Collinearity diagnostics
+
+Due to the high correlation in the data, we will use some in-depth collinearity diagnostics
+
+1. Variance inflation factor (not overly relevant due to large sample size)
+2. Condition index and variance decomposition
+3. Stability under perturbation analysis
+4. Stability under data sub-sampling
+5. Collinearity in regression coefficients
+
+### Variance inflation factor
+
+```{r}
+vif(mod_global)
+```
+
+Generally low. All below 10 except elevrange, and even then the large sample size means this is not that large. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
+
+## Condition index and variance decomposition
+
+See [Callaghan and Chen 2008](http://pareonline.net/getvn.asp?v=13&n=5) for information on how to interpret condition indices and variance decomposition (but use D. Belsley, E. Kuh, and R. Welsch (1980). Regression Diagnostics. Wiley.
+ as citation). In short, rows in the below table with a high condition index (first column, high is > 10 - moderate to strong collinearity, > 30 - severe collinearity) which are associated with high variance of regression estimate (the rest of the table) will cause a problem in the analysis. 
+
+```{r test_collin_fullmod}
+mod_diag <- colldiag(mod_global) %>% lapply(as.data.frame)
+mod_diag <- do.call("cbind", mod_diag)
+names(mod_diag) <- c("CI", "Intercept", "Mean elev", "MW elev", "LS elev", 
+                     "Temp", "Temp^2", "Precip", "Precip^2", "P season")
+kable(mod_diag, digits = 3)
+```
+
+The highest condition index is `r round(max(mod_diag$CI), 2)`, which is in the "weak collinearity" range. Model looks fine by these diagnostics. There is high variance decomposition associated with the MW & LS Elevation coefficient estimates, but given the CI is within "weak collinearity range", this should be okay. We will check this with some tests on the data. 
+
+## Stability under perturbation analysis
+
+We will add some random noise to the two environmental heterogeneity measures to evaluate collinearity. 
+
+```{r}
+attach(forests_df_t)
+perturb_mod <- perturb(mod_global, pvars = c("winrange500", "elevrange"), prange=c(0.1,0.1))
+detach(forests_df_t)
+
+perturb_mod$coeff.table %>% as.tibble %>% 
+  gather(variable, value) %>% 
+  group_by(variable) %>% 
+  summarise(mean_val = mean(value), 
+            sd_val = sd(value), 
+            min_val = min(value), 
+            max_val = max(value)) %>% 
+  mutate(variable = factor(variable, levels = coefforder, 
+                           labels = gsub("\n", " ", coefflabel))) %>% 
+  arrange(variable) %>% 
+  kable(digits = 3)
+
+```
+
+Biggest changes are to the MW & LS values, but this does not change the conclusions and the sd is still reasonably small (SD is ~ 10% of the coefficient estimate). 
+
+## Stability under data sub-sampling
+
+Now let's test this by checking the model results are stable under subsampling. 
+
+NB This will reduce the power to detect significant relationships (increase Type II errors).
+
+```{r model_subsample, fig.width = 12}
+model_subsample <-function(x, dat, n) { 
+  
+  dat <- sample_n(dat, n)
+  
+  mod <- glm.nb(sprich ~ elevmean + winrange500 + elevrange + bio1 + I(bio1^2) + 
+                  bio12 + I(bio12^2) + bio15, 
+                data = dat, na.action = na.fail)
+  
+  res <- mod %>% coef %>% enframe(name = "variable", value = "coef") %>%
+    left_join(mod %>% confint %>% as_tibble(rownames = "variable")) %>%
+    mutate(fvariable = factor(variable, levels = coefforder, 
+                              labels = gsub("\n", " ", coefflabel))) %>%
+    arrange(fvariable) 
+  
+  r2 <- 1 - (mod$deviance / mod$null.deviance)
+  
+  res %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% mutate(D = r2)
+}
+
+n <- 1500
+nsim <- 100
+out <- map_dfr(1:nsim, ~model_subsample(.x, forests_df_t, n))
+
+ggplot(data = out, aes(x = D)) + 
+  geom_histogram() + 
+  geom_vline(xintercept = globalr2)
+
+out_ns <- out %>% mutate(signif = ifelse((`2.5 %` > 0 & `97.5 %` > 0) | 
+                                           (`2.5 %` < 0 & `97.5 %` < 0), 1, 0)) %>% 
+  filter(signif == 0)
+
+out_narrow <- out %>% gather(measure, value, -D, -fvariable) %>% 
+  mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
+         measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
+  filter(grepl("elevation", fvariable))
+
+res_narrow <- res_global %>% gather(measure, value, -fvariable, -variable) %>% 
+  mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
+         measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
+  filter(grepl("elevation", fvariable))
+
+ggplot(out_narrow, aes(x = "fvariable", y = value)) + 
+  geom_jitter() + 
+  facet_grid(measure~fvariable) + 
+  geom_hline(data = res_narrow, aes(yintercept = value), colour = "red") + 
+  labs(x = "Variable", y = "Coefficient estimate") + 
+  theme(axis.text.x=element_blank())
+
+out_summary <- group_by(out_narrow, fvariable, measure) %>% 
+  summarise(mean_val = mean(value), 
+            min_val = min(value), 
+            max_val = max(value), 
+            sd_val = sd(value)) 
+
+out_summary %>% kable(digits = 3)
+
+out_ns <- filter(out, `2.5 %` < 0 & `97.5 %` > 0) %>% 
+  group_by(fvariable) %>% 
+  summarise(prop_ns = n() / nsim) 
+
+out_ns %>% kable(digits = 3)
+```
+
+In this plot, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
+
+### Collinearity in regression coefficients
+
+```{r}
+coef_cov <- cov2cor(vcov(mod_global)) 
+
+coef_cov%>% 
+  as.tibble(rownames = "variable") %>% 
+  #mutate(fvariable = factor(variable, levels = coefforder, 
+  #                          labels = gsub("\n", " ", coefflabel))) %>%
+  #arrange(fvariable) %>% 
+  kable(digits = 2)
+```
+
+Correlation between elevrange and winrange, but not super high. 
+
+## Commonality analysis
+
+Although the model does not display multicollinearity despite high correlation between the two Shannon measures, we will apply commonality analysis. This approach allows us to understand the importance of different variables despite any collinearity in the model. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanation of the approach. For each variablem we will calculate: 
+
+1. *Beta coefficients* the standardised partial regression coefficients
+2. *Structural coefficients* Squared Pearson correlation between the variable and the fitted values from the model
+3. *Unique variance* Amount of variance uniquely accounted for by the variable
+4. *Common variance* Amount of variance in common with other variables
+5. *Total variance* Total amount of variance accounted for by the variable
+
+```{r}
+ca_table <- res_global %>% 
+  filter(fvariable != "Intercept") %>% 
+  # structural coefficients
+  mutate(r_s = map_dbl(variable, function(x) {
+    out <- cor(model.matrix(mod_global)[,x], mod_global$fitted.values)
+  }),
+  r_s2 = r_s^2) %>% 
+  # unique, common and total variance
+  inner_join(calc_commonality(mod_global)$CCTotalbyVar %>% 
+               as.tibble(rownames = "variable")) %>% 
+  select(fvariable, beta = coef, `2.5 %`, `97.5 %`, r_s, r_s2, Unique, Common, Total) %>% 
+  arrange(fvariable)
+
+kable(ca_table, digits = 3)
+
+```
+
+## Stability under model structure change
+
+What about changes to the model? What conclusions would we draw if we only included the LS or MW version of the elevation heterogeneity variable? 
+
+NB Ommission of confounding variables can bias parameter estimates, so if the opposing effect of MW and LS elevation is a true effect, we cannot trust the outcome of a model that contains only one of these variables. 
+
+### Model with only MW
+```{r model_mw}
+mod_mw <- glm.nb(sprich ~ elevmean + winrange500 + bio1 + I(bio1^2) + 
+                   bio12 + I(bio12^2) + bio15, 
+                     data = forests_df_t, na.action = na.fail)
+
+res_mw <- mod_mw %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_mw %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, 
+                            labels = gsub("\n", " ", coefflabel))) %>%
+  arrange(fvariable) 
+
+mwr2 <- 1 - (mod_mw$deviance / mod_mw$null.deviance)
+
+res_mw %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+```
+
+Negative, but non-significant effect of MW Elevation (500m). Change in estimate is `r round(res_mw[2, 2] - res_global[2, 2], 2)`, (change in LCI = `r round(res_mw[2, 3] - res_global[2, 3], 2)` and UCI = `r round(res_mw[2, 4] - res_global[2, 4], 2)`). $R^2 = $`r mwr2`
+
+### Model with only LS
+```{r model_ls}
+mod_ls <- glm.nb(sprich ~ elevmean + elevrange + bio1 + I(bio1^2) + 
+                   bio12 + I(bio12^2) + bio15, 
+                     data = forests_df_t, na.action = na.fail)
+
+res_ls <- mod_ls %>% coef %>% enframe(name = "variable", value = "coef") %>%
+  left_join(mod_ls %>% confint %>% as_tibble(rownames = "variable")) %>%
+  mutate(fvariable = factor(variable, levels = coefforder, 
+                            labels = gsub("\n", " ", coefflabel))) %>%
+  arrange(fvariable) 
+
+lsr2 <- 1 - (mod_ls$deviance / mod_ls$null.deviance)
+
+res_ls %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+```
+
+Still a positive and significant effect of LS Elevation, but not as strong. Change in estimate is `r round(res_mw[2, 2] - res_global[3, 2], 2)`, (change in LCI = `r round(res_mw[2, 3] - res_global[3, 3])` and UCI = `r round(res_mw[2, 4] - res_global[3, 4])`).
+
+We would conclude that topographic heterogeneity is not important, but this may be because the two effects are opposing: we have omitted variable bias. Given the multicollinearity diagnostics above, it suggests that multicollinearity is not affecting the estimates and that this is infact a real effect. 
+
+# Session Info
 ```{r}
 devtools::session_info()
 ```
