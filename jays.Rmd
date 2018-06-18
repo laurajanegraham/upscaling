@@ -227,7 +227,7 @@ Our sample size is n = `r nrow(jay_df_t)`.
 
 Our model contains teh following variables: MW Shannon, LS Shannon, % forest, % urban and mean temperature. We are also including the interaction term between temperature and MW & LS Shannon. 
 ```{r global_model}
-mod_global <- lm(index10_logit ~ winshannon + lsshannon + urban + bio1 +
+mod_global <- lm(index10_logit ~ winshannon + lsshannon + habitat + urban + bio1 +
                    bio1:lsshannon + bio1:winshannon, 
                  data = jay_df_t, na.action = na.fail)
 
@@ -348,7 +348,7 @@ Due to the high correlation in the data, we will use some in-depth collinearity 
 vif(mod_global)
 ```
 
-Although these variance inflation factors may seem high, due to the large sample size (and that we generally still detect effects) we do not see these as problematic. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
+Although these variance inflation factors may seem high, due to the large sample size (and that we generally still detect effects) we do not see these as problematic; although it may explain why we do not detect an effect of LS Shannon. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
 
 ### Condition index and variance decomposition
 
@@ -358,11 +358,11 @@ See [Callaghan and Chen 2008](http://pareonline.net/getvn.asp?v=13&n=5) for info
 mod_diag <- colldiag(mod_global) %>% lapply(as.data.frame)
 mod_diag <- do.call("cbind", mod_diag)
 names(mod_diag) <- c("CI", "Intercept", "MW Shannon", "LS Shannon", 
-                     "% Urban", "Temp")
+                     "Forest %", "Urban %", "Temp")
 kable(mod_diag, digits = 3)
 ```
 
-The highest condition index is `r round(max(mod_diag$CI), 2)`; this puts us in the "weak collinearity" range. Even by conservative rule-of-thumb model looks fine by these diagnostics. There is high variance decomposition associated with the MW & LS Shannon (particularly LS) coefficient estimates. We will check the effect of this with some further tests on the data. 
+The highest condition index is `r round(max(mod_diag$CI), 2)`; this puts us in the "moderate collinearity" range. There is high variance decomposition associated with the MW & LS Shannon (particularly LS) coefficient estimates. We will check the effect of this with some further tests on the data. 
 
 ### Stability under perturbation analysis
 
@@ -486,7 +486,6 @@ ca_table <- res_global %>%
   arrange(fvariable)
 
 kable(ca_table, digits = 3)
-
 ```
 
 LS Shannon has no unique variance explained associated. The structure coefficient is much larger than the beta, which suggests suppresion (or, in reality, that it's measuring the same thing as MW Shannon, but less effectively). MW Shannon explains `r round(ca_table[1, 8]*100, 2)`% of the total variance in the data (more than the `r round(ca_table[2, 8]*100, 2)` explained by LS Shannon). Temperature explains by far the most variance in the data (`r round(ca_table[6, 8]*100, 2)`). 
@@ -496,7 +495,7 @@ LS Shannon has no unique variance explained associated. The structure coefficien
 The results we will display along with the commonality analysis will be the results of a MW-only version of the full model. 
 
 ```{r model_mw}
-mod_mw <- lm(index10_logit ~ winshannon + urban + bio1 +
+mod_mw <- lm(index10_logit ~ winshannon + habitat + urban + bio1 +
                    bio1:winshannon, 
                  data = jay_df_t, na.action = na.fail)
 
@@ -546,8 +545,6 @@ jay_figure
 
 save(jay_figure, file = "results/jays_res_figure.Rda")
 ```
-
-
 
 ## Session Info
 ```{r}
