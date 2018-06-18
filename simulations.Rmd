@@ -15,7 +15,7 @@ In the first step, we load all of the required packages. Note that grainchanger 
 
 `devtools::install_github("laurajanegraham/grainchanger")`
 
-Helper functions `ls_analyse()`, `ls_create()` and `torus_create()` are loaded at this stage, these are available from [put link to zenodo version of repo once created] (for now it's [here](github.com/laurajanegraham/UPSCALING/R)).
+Helper function `torus_create()` is loaded at this stage, this is available from [put link to zenodo version of repo once created] (for now it's [here](github.com/laurajanegraham/UPSCALING/R)).
 
 ```{r setup}
 # load required libraries
