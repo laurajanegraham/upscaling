@@ -1,15 +1,19 @@
 ---
-title: "Appendix IV: forest case study"
-output: pdf_document
+title: "Appendix III: forest case study"
+output: 
+  pdf_document:
+    toc: true
+    number_sections: true
 header-includes:
     - \usepackage{booktabs}
+    - \usepackage{caption}
 ---
 
 ```{r, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 ```
 
-## Required packages
+# Required packages
 
 In the first step, we load all of the required packages. Note that grainchanger (the package developed for this paper) can be installed using:
 
@@ -18,6 +22,8 @@ In the first step, we load all of the required packages. Note that grainchanger 
 Other options in this section set the order and labels for the variables for plotting and tables. 
 
 ```{r setup}
+library(captioner)
+library(jtools)
 library(car)
 library(perturb)
 library(MASS)
@@ -55,9 +61,9 @@ coefflabel <- c("(Intercept)", "MW elevation\n(500m)", "LS elevation", "Mean ele
                 "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
 ```
 
-## Data
+# Data
 
-### EU forest data
+## Biological data
 
 First we need to load in and spatialise the EU forest data: available for download from [figshare](https://ndownloader.figshare.com/files/6662535).
 
@@ -73,16 +79,13 @@ forests <- SpatialPointsDataFrame(forests[,1:2], forests[,3],
                                   proj4string = crs(eu_crs))
 ```
 
-### Environmental data
+## Environmental data
 
 Analyses will be at 0.5 degree resolution. The data to be upscaled are the elevation data from the [European Environment Agency](https://www.eea.europa.eu/data-and-maps/data/eu-dem). By cropping all datasets to the extent of the EU elevation data, we end up losing some of the data from the EU forest dataset, such as the records from Northern Africa and the Canaries. We aggregate the elevation to 100m (from 25m) for ease of computation.
 
 We will use the moving window to upscale the variation in elevation using a radius of 500 m. We will also calculate variation in elevation at 0.5 degree resolution. As covariates, we  calculated average temperature and precipitation at 0.5 degree resolution. 
 
 ```{r envdata, eval = FALSE}
-# This section only gets run the first time (or if changed) and the output saved to file.
-# Set eval = FALSE at all other times.
-
 # get climate data
 wc_bio <- getData('worldclim', var = "bio", res = 10, path = "~/DATA/CLIMATE/worldclim/")
 wc_bio_30 <- aggregate(wc_bio, fact = 3)
@@ -178,16 +181,18 @@ save(forests_sp, file="results/forests_covariates.Rda")
 `r load("results/forests_runtime.Rda")`
 Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 500 m radius window took:  `r round(run_time, 2)` minutes. 
 
+## Exploration and transformation
+
 ```{r reload_data}
 load("results/forests_covariates.Rda")
-forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit
+forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit %>% 
+  mutate(bio1 = bio1/10)
+# /10 due to the way worldclim stores temperature data
 ```
-
-### Exploration and transformation
 
 What do the variables look like spatially?
 
-```{r spatial_plot, fig.width = 10}
+```{r spatial_plot}
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
@@ -221,8 +226,13 @@ cov_plot <- ggplot(covs) +
 
 save(cov_plot, file = "results/forests_cov_plot.Rda")
 
-plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
+data_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
                           label_size = 10, rel_widths = c(1, 1.4))
+
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F5_forests_data_figure.jpg", 
+          data_plot, base_width = 6.81102)
+
+data_plot
 ```
 
 How are the variables distributed and where are the correlations?
@@ -242,26 +252,30 @@ MW Elevation is the lowest correlation except for total precipitation (bio12). H
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
-c.winrange500 <- optimise(skew.score, c(0, 20), x = forests_df$winrange500)$minimum
-c.elevrange <- optimise(skew.score, c(0, 20), x = forests_df$elevrange)$minimum
-c.elevmean <- optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum
-c.bio12 <- optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum
-c.bio15 <- optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum
+cs <- tibble(winrange500 = optimise(skew.score, c(0, 20), x = forests_df$winrange500)$minimum,
+             elevrange = optimise(skew.score, c(0, 20), x = forests_df$elevrange)$minimum,
+             elevmean = optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum,
+             bio12 = optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum,
+             bio15 = optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum)
 
 
 forests_df_t <- select(forests_df, varorder) %>% 
-  mutate(winrange500 = log(winrange500 + c.winrange500),
-         elevrange = log(elevrange + c.elevrange),
-         elevmean = log(elevmean + c.elevmean),
-         bio12 = log(bio12 + c.bio12),
-         bio15 = log(bio15 + c.bio15))
+  mutate(winrange500 = log(winrange500 + cs$winrange500),
+         elevrange = log(elevrange + cs$elevrange),
+         elevmean = log(elevmean + cs$elevmean),
+         bio12 = log(bio12 + cs$bio12),
+         bio15 = log(bio15 + cs$bio15))
 
 forests_narrow_t <- gather(forests_df_t, variable, value) %>% 
   mutate(variable = factor(variable, levels = varorder, labels = varlabel))
 
-ggplot(forests_narrow_t, aes(x = value)) + 
-  geom_histogram(bins = 30) + 
-  facet_wrap(~variable, scales = "free_x")
+# get mean and sd values from the log-transformed data (for back scaling)
+means <- forests_df_t %>% 
+  summarise_all(funs(mean, sd)) %>% 
+  gather() %>% 
+  separate(key, into=c("covariate", "measure")) %>% 
+  spread(measure, value) %>% 
+  left_join(gather(cs, covariate, c))
 ```
 
 We scaled the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
@@ -279,7 +293,7 @@ Our model contains the following variables: MW Elevation, LS Elevation, mean ele
 
 The model is fit to a negative binomial distribution due to overdispersion (based on earlier diagnostics). 
 
-```{r model}
+```{r global_model}
 mod_global <- glm.nb(sprich ~ elevmean + winrange500 + elevrange + bio1 + 
                        I(bio1^2) + bio12 + I(bio12^2) + bio15, 
                      data = forests_df_t, na.action = na.fail)
@@ -299,10 +313,13 @@ There is a negative effect of local-scale (500 m) variation in elevation (MW Ele
 
 This model explains `r round(globalr2*100, 2)`% of the deviance in tree species richness. This was calculated using D-squared. 
 
+# Model validation
+
 Check the model specification using the DHARMa package. 
 
 ```{r validation, fig.height = 8}
 simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
+
 plotSimulatedResiduals(simulationOutput)
 
 plotResiduals(forests_df_t$winrange500, 
@@ -332,32 +349,7 @@ plotResiduals(forests_df_t$bio15,
 
 Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms.
 
-# Plots and summary of main results
-
-MW elevation and LS elevation had a similar absolute effect size based on the partial regression coefficients. However, MW elevation had a negative effect on species richness, whereas for LS elevation it was positive. This suggests that topographic variation has different effects on tree species richness depending on the scale at which it is measured. The interaction between mean elevation and MW elevation was positive, and present in all supported models. This suggests that effect of local-scale topographic variation is positive at high altitudes, but negative at low altitudes. The opposite is true of LS elevation, although this interaction term is not as strong.
-
-```{r results_out}
-# The first line creates a dataframe of the variables to calculate interaction for
-figure1_df <- res_global %>% mutate(type = "mean") %>% select(-fvariable) %>%
-  filter(variable != "(Intercept)") %>%
-  mutate(variable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
-  na.omit
-
-pd <- position_dodge(0.5)
-
-forest_figure <- ggplot(figure1_df, aes(x = variable, y = coef)) + 
-  geom_errorbar(aes(ymin=`2.5 %`, ymax=`97.5 %`), width=0.2, position=pd) +
-  geom_point(position = pd) +
-  geom_hline(yintercept = 0, linetype = "dotted") + 
-  ylab(expression(paste("Coefficient estimate " %+-% " 95% CI"))) + 
-  xlab("") + theme(legend.position = "none")
-
-forest_figure
-
-save(forest_figure, file = "results/forests_res_figure.Rda")
-```
-
-## Collinearity diagnostics
+# Collinearity diagnostics
 
 Due to the high correlation in the data, we will use some in-depth collinearity diagnostics
 
@@ -367,7 +359,7 @@ Due to the high correlation in the data, we will use some in-depth collinearity 
 4. Stability under data sub-sampling
 5. Collinearity in regression coefficients
 
-### Variance inflation factor
+## Variance inflation factor
 
 ```{r}
 vif(mod_global)
@@ -487,7 +479,9 @@ out_ns %>% kable(digits = 3)
 
 In this plot, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
 
-### Collinearity in regression coefficients
+## Collinearity in regression coefficients
+
+I've tested this here due to concern that the coefficients for MW Elevation and LS Elevation look like mirror images of each other. 
 
 ```{r}
 coef_cov <- cov2cor(vcov(mod_global)) 
@@ -502,7 +496,7 @@ coef_cov%>%
 
 Correlation between elevrange and winrange, but not super high. 
 
-## Commonality analysis
+# Commonality analysis
 
 Although the model does not display multicollinearity despite high correlation between the two Shannon measures, we will apply commonality analysis. This approach allows us to understand the importance of different variables despite any collinearity in the model. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanation of the approach. For each variablem we will calculate: 
 
@@ -527,54 +521,115 @@ ca_table <- res_global %>%
   arrange(fvariable)
 
 kable(ca_table, digits = 3)
-
 ```
 
-## Stability under model structure change
+# Final results and plots
 
-What about changes to the model? What conclusions would we draw if we only included the LS or MW version of the elevation heterogeneity variable? 
+We will now plot the main effects from the full model. 
 
-NB Ommission of confounding variables can bias parameter estimates, so if the opposing effect of MW and LS elevation is a true effect, we cannot trust the outcome of a model that contains only one of these variables. 
+```{r mod_vis, fig.width = 4.33071, fig.height = 6.496065}
+# NB BACK-SCALING ETC. STILL NOT QUITE RIGHT
+mean_winrange <- filter(means, covariate == "winrange500") %>% pull(mean)
+sd_winrange <- filter(means, covariate == "winrange500") %>% pull(sd)
+c_winrange <- filter(means, covariate == "winrange500") %>% pull(c)
+forests_prescale$unscale_winrange <- forests_df_t$winrange500*sd_winrange + mean_winrange
+forests_df$unlog_winrange <- exp(forests_prescale$unscale_winrange) - c_winrange
+# ^^^ THIS PART OF THE PROCESS IS FINE
 
-### Model with only MW
-```{r model_mw}
-mod_mw <- glm.nb(sprich ~ elevmean + winrange500 + bio1 + I(bio1^2) + 
-                   bio12 + I(bio12^2) + bio15, 
-                     data = forests_df_t, na.action = na.fail)
+# NOW LETS TRY THE PREDICTED VALUES
+preds <- make_predictions(mod_global, 
+                          pred = "winrange500", 
+                          data = forests_df_t,
+                          interval = TRUE)$predicted %>% 
+  select(sprich, ymax, ymin, pred = winrange500) %>% 
+  mutate(covariate = "winrange500") %>% as_tibble %>% 
+  inner_join(means) %>% 
+  mutate(pred1 = pred*sd + mean,
+         pred2 = exp(pred1) - c)
 
-res_mw <- mod_mw %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_mw %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable) 
+# need to predict from the model then convert to the original scales
+pred_vals <- bind_rows(
+  make_predictions(mod_global, pred = "elevmean", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = elevmean) %>% 
+    mutate(covariate = "elevmean"),
+  make_predictions(mod_global, pred = "elevrange", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = elevrange) %>% 
+    mutate(covariate = "elevrange"),
+    make_predictions(mod_global, pred = "winrange500", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = winrange500) %>% 
+    mutate(covariate = "winrange500"),
+  make_predictions(mod_global, pred = "bio1", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = bio1) %>% 
+    mutate(covariate = "bio1"),
+    make_predictions(mod_global, pred = "bio12", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = bio12) %>% 
+    mutate(covariate = "bio12"),
+    make_predictions(mod_global, pred = "bio15", interval = TRUE)$predicted %>% 
+    select(sprich, ymax, ymin, pred = bio15) %>% 
+    mutate(covariate = "bio15")) %>% 
+  as_tibble %>% 
+  inner_join(means) %>% 
+  mutate(pred = pred*sd + mean, 
+         pred = case_when(!is.na(c) ~ exp(pred) - c,
+                          TRUE ~ pred))
 
-mwr2 <- 1 - (mod_mw$deviance / mod_mw$null.deviance)
+# plot the results
+winrange_plot <- ggplot(pred_vals %>% filter(covariate == "winrange500"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = "MW elevation (500m)",
+       y = "")
 
-res_mw %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+range_plot <- ggplot(pred_vals %>% filter(covariate == "elevrange"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = "LS elevation",
+       y = "")
+
+mean_plot <- ggplot(pred_vals %>% filter(covariate == "elevmean"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = "Mean elevation",
+        y = expression("Tree species richness (" %+-% "95% CI)"))
+
+bio1_plot <- ggplot(pred_vals %>% filter(covariate == "bio1"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = expression("Temperature (" * degree * "C)"),
+       y = "")
+
+bio12_plot <- ggplot(pred_vals %>% filter(covariate == "bio12"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = "Total precipitation (mm)",
+       y = "")
+
+bio15_plot <- ggplot(pred_vals %>% filter(covariate == "bio15"), 
+                        aes(x = pred, y = sprich)) + 
+  geom_line() + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  scale_y_continuous(limits = c(0, 75), breaks = seq(from = 0, to = 75, by = 15)) + 
+  labs(x = "Precipitation seasonality",
+       y = "")
+
+res_plot <- plot_grid(winrange_plot, range_plot, mean_plot, 
+                      bio1_plot, bio12_plot, bio15_plot, 
+                      ncol = 2)
+save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/FX_forest_results.jpg", 
+          res_plot, base_width = 4.33071, base_height = 6.496065)
+res_plot
 ```
 
-Negative, but non-significant effect of MW Elevation (500m). Change in estimate is `r round(res_mw[2, 2] - res_global[2, 2], 2)`, (change in LCI = `r round(res_mw[2, 3] - res_global[2, 3], 2)` and UCI = `r round(res_mw[2, 4] - res_global[2, 4], 2)`). $R^2 = $`r mwr2`
-
-### Model with only LS
-```{r model_ls}
-mod_ls <- glm.nb(sprich ~ elevmean + elevrange + bio1 + I(bio1^2) + 
-                   bio12 + I(bio12^2) + bio15, 
-                     data = forests_df_t, na.action = na.fail)
-
-res_ls <- mod_ls %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_ls %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable) 
-
-lsr2 <- 1 - (mod_ls$deviance / mod_ls$null.deviance)
-
-res_ls %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
-```
-
-Still a positive and significant effect of LS Elevation, but not as strong. Change in estimate is `r round(res_mw[2, 2] - res_global[3, 2], 2)`, (change in LCI = `r round(res_mw[2, 3] - res_global[3, 3])` and UCI = `r round(res_mw[2, 4] - res_global[3, 4])`).
-
-We would conclude that topographic heterogeneity is not important, but this may be because the two effects are opposing: we have omitted variable bias. Given the multicollinearity diagnostics above, it suggests that multicollinearity is not affecting the estimates and that this is infact a real effect. 
 
 # Session Info
 ```{r}
