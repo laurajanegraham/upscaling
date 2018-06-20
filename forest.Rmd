@@ -528,25 +528,6 @@ kable(ca_table, digits = 3)
 We will now plot the main effects from the full model. 
 
 ```{r mod_vis, fig.width = 4.33071, fig.height = 6.496065}
-# NB BACK-SCALING ETC. STILL NOT QUITE RIGHT
-mean_winrange <- filter(means, covariate == "winrange500") %>% pull(mean)
-sd_winrange <- filter(means, covariate == "winrange500") %>% pull(sd)
-c_winrange <- filter(means, covariate == "winrange500") %>% pull(c)
-forests_prescale$unscale_winrange <- forests_df_t$winrange500*sd_winrange + mean_winrange
-forests_df$unlog_winrange <- exp(forests_prescale$unscale_winrange) - c_winrange
-# ^^^ THIS PART OF THE PROCESS IS FINE
-
-# NOW LETS TRY THE PREDICTED VALUES
-preds <- make_predictions(mod_global, 
-                          pred = "winrange500", 
-                          data = forests_df_t,
-                          interval = TRUE)$predicted %>% 
-  select(sprich, ymax, ymin, pred = winrange500) %>% 
-  mutate(covariate = "winrange500") %>% as_tibble %>% 
-  inner_join(means) %>% 
-  mutate(pred1 = pred*sd + mean,
-         pred2 = exp(pred1) - c)
-
 # need to predict from the model then convert to the original scales
 pred_vals <- bind_rows(
   make_predictions(mod_global, pred = "elevmean", interval = TRUE)$predicted %>% 
