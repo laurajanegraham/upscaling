@@ -4,13 +4,20 @@ output:
   pdf_document:
     toc: true
     number_sections: true
+    fig_caption: yes
 header-includes:
     - \usepackage{booktabs}
     - \usepackage{caption}
 ---
 
 ```{r, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE, 
+                      message = FALSE, 
+                      warning = FALSE, 
+                      fig.path = 'figures/',
+                      dpi = 300,
+                      dev = c('tiff', 'png'),
+                      fig.width = 6.496065)
 ```
 
 # Required packages
@@ -45,7 +52,9 @@ library(tidyverse)
 source("R/ca_glm.R")
 
 # set up plotting options
-theme_set(theme_classic() + theme(strip.background = element_blank()))
+theme_set(theme_bw(base_size = 7) + theme(strip.background = element_blank(), 
+                             panel.grid.major = element_blank(),
+                             panel.grid.minor = element_blank()))
 
 varorder <- c("sprich", "winrange500", "elevrange", "elevmean", "bio1", "bio12", "bio15")
 
@@ -59,6 +68,10 @@ coefflabel <- c("(Intercept)", "MW elevation\n(500m)", "LS elevation", "Mean ele
                 "Mean elevation : MW elevation", "Mean elevation : LS elevation", 
                 "Temperature", "Precipitation", "Precipitation\nseasonality", 
                 "Temperature\n(quadratic)", "Precipitation\n(quadratic)")
+
+# required for captioning and numbering tables and figures
+tabs <- captioner(prefix = "Table AIII.")
+figs <- captioner(prefix = "Figure AIII.")
 ```
 
 # Data
@@ -93,7 +106,7 @@ wc_bio_30 <- aggregate(wc_bio, fact = 3)
 # load in the elevation data
 elev <- raster("~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_dem_3035_europe.tif")
 
-# get %>% forest and climate data in same projection as elev and crop worldclim data by the EU
+# get forest and climate data in same projection as elev and crop worldclim data by the EU
 # forest dataset
 forests <- spTransform(forests, crs(elev))
 wc_bio_30 <- projectRaster(wc_bio_30, crs = crs(elev))
@@ -139,8 +152,6 @@ rasters.mosaicargs$na.rm <- TRUE
 
 elev_100 <- do.call("mosaic", rasters.mosaicargs)
 
-
-
 # create the grid level covariates
 eu_grid$elevvar <- nomove_agg(grid = eu_grid, dat = elev_100, 
                                   fn = "var", na.rm = TRUE)
@@ -179,7 +190,8 @@ save(forests_sp, file="results/forests_covariates.Rda")
 
 
 `r load("results/forests_runtime.Rda")`
-Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 500 m radius window took:  `r round(run_time, 2)` minutes. 
+
+Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 500 m radius window took: `r round(run_time, 2)` minutes. 
 
 ## Exploration and transformation
 
@@ -192,7 +204,7 @@ forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit %>%
 
 What do the variables look like spatially?
 
-```{r spatial_plot}
+```{r F5_forests_data_figure}
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
@@ -204,12 +216,14 @@ sp_plot <- ggplot(forests_narrow %>% filter(variable == "sprich")) +
   coord_sf(crs = st_crs(forests_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "", option = "magma") + 
   facet_wrap(~facet) + 
-  theme(axis.text = element_blank(), axis.line = element_blank(), 
+  theme(axis.text = element_blank(), 
+        axis.line = element_blank(), 
         axis.ticks = element_blank(),
-        legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"))
-
-save(sp_plot, file = "results/forests_response_plot.Rda")
+        legend.position = "bottom", 
+        legend.title.align = 0.5,
+        legend.key.height=unit(6,"points"), 
+        legend.key.width = unit(1.5, "line"),
+        panel.border = element_blank())
 
 covs <- forests_narrow %>% 
   filter(variable %in% varorder[-1]) %>% 
@@ -218,26 +232,28 @@ covs <- forests_narrow %>%
 cov_plot <- ggplot(covs) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(forests_narrow), datum = NA) + 
-  scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
-  theme(axis.text = element_blank(), axis.line = element_blank(), 
+  scale_fill_viridis_c(name = "") + 
+  facet_wrap(~variable) + 
+  theme(axis.text = element_blank(), 
+        axis.line = element_blank(), 
         axis.ticks = element_blank(),
-        legend.position = "bottom", legend.title.align = 0.5,
-        legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"))
+        legend.position = "bottom", 
+        legend.title.align = 0.5,
+        legend.key.height=unit(6,"points"), 
+        legend.key.width = unit(2, "line"),
+        panel.border = element_blank())
 
-save(cov_plot, file = "results/forests_cov_plot.Rda")
-
-data_plot <- plot_grid(sp_plot, cov_plot, labels = c("a)", "b)"),
-                          label_size = 10, rel_widths = c(1, 1.4))
-
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F5_forests_data_figure.jpg", 
-          data_plot, base_width = 6.81102)
-
-data_plot
+plot_grid(sp_plot, cov_plot, 
+          labels = c("a)", "b)"),
+          label_size = 7, 
+          rel_widths = c(1, 1.4))
 ```
+
+`r figs("spatial_plot", "A case study of the effect of topographic heterogeneity on tree species richness. Study area showing the spatial distribution of (a) tree species richness and (b) scaled covariates (mean = 0; standard deviation = 1).")`
 
 How are the variables distributed and where are the correlations?
 
-```{r pairs, fig.width = 10, fig.height = 10}
+```{r pairs}
 ggpairs(
   forests_df %>% select(varorder), 
   upper = list(
@@ -246,6 +262,8 @@ ggpairs(
   columnLabels = varlabel
 )
 ```
+
+`r figs("pairs", paste("Pairs plot of *Garrulus glandarius* relative abundance and covariates. Correlations shown are Spearman's", expression(rho), "."))`
 
 MW Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). Our expectation that variation in elevation would be important is supported here by the fact that the species richness correlation with mean elevation is lower. Species richness ideal for Poisson distribution; right skew to MW Elevation and LS elevation, Mean elevation, as well as the precipitation variables - need to transform. 
 
@@ -309,6 +327,8 @@ globalr2 <- 1 - (mod_global$deviance / mod_global$null.deviance)
 res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
 ```
 
+`r tabs("global_model", "Results of negative binomial GLM for the full model")`
+
 There is a negative effect of local-scale (500 m) variation in elevation (MW Elevation), but a positive effect of landscape-scale (~50km) variation in elevation (LS Elevation). 
 
 This model explains `r round(globalr2*100, 2)`% of the deviance in tree species richness. This was calculated using D-squared. 
@@ -317,11 +337,15 @@ This model explains `r round(globalr2*100, 2)`% of the deviance in tree species 
 
 Check the model specification using the DHARMa package. 
 
-```{r validation, fig.height = 8}
+```{r validation1}
 simulationOutput <- simulateResiduals(fittedModel = mod_global, n = 250)
 
 plotSimulatedResiduals(simulationOutput)
+```
+`r figs("resid", "Residual plots for checking model specification")`
 
+```{r validation2}
+par(mfrow = c(2, 3))
 plotResiduals(forests_df_t$winrange500, 
               simulationOutput$scaledResiduals, 
               xlab = "MW elevation (500m)")
@@ -347,6 +371,8 @@ plotResiduals(forests_df_t$bio15,
               xlab = "Precipitation seasonality")
 ```
 
+`r figs("resid_pred", "Residual vs predictor plots for checking model specification")`
+
 Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms.
 
 # Collinearity diagnostics
@@ -361,9 +387,11 @@ Due to the high correlation in the data, we will use some in-depth collinearity 
 
 ## Variance inflation factor
 
-```{r}
+```{r vif}
 vif(mod_global)
 ```
+
+`r tabs("vif", "Variance inflation factors for each term in the global model")`
 
 Generally low. All below 10 except elevrange, and even then the large sample size means this is not that large. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
 
@@ -372,7 +400,7 @@ Generally low. All below 10 except elevrange, and even then the large sample siz
 See [Callaghan and Chen 2008](http://pareonline.net/getvn.asp?v=13&n=5) for information on how to interpret condition indices and variance decomposition (but use D. Belsley, E. Kuh, and R. Welsch (1980). Regression Diagnostics. Wiley.
  as citation). In short, rows in the below table with a high condition index (first column, high is > 10 - moderate to strong collinearity, > 30 - severe collinearity) which are associated with high variance of regression estimate (the rest of the table) will cause a problem in the analysis. 
 
-```{r test_collin_fullmod}
+```{r test_collin}
 mod_diag <- colldiag(mod_global) %>% lapply(as.data.frame)
 mod_diag <- do.call("cbind", mod_diag)
 names(mod_diag) <- c("CI", "Intercept", "Mean elev", "MW elev", "LS elev", 
@@ -380,13 +408,15 @@ names(mod_diag) <- c("CI", "Intercept", "Mean elev", "MW elev", "LS elev",
 kable(mod_diag, digits = 3)
 ```
 
+`r tabs("condition", "Condition index and variance decomposition")`
+
 The highest condition index is `r round(max(mod_diag$CI), 2)`, which is in the "weak collinearity" range. Model looks fine by these diagnostics. There is high variance decomposition associated with the MW & LS Elevation coefficient estimates, but given the CI is within "weak collinearity range", this should be okay. We will check this with some tests on the data. 
 
 ## Stability under perturbation analysis
 
 We will add some random noise to the two environmental heterogeneity measures to evaluate collinearity. 
 
-```{r}
+```{r perturb}
 attach(forests_df_t)
 perturb_mod <- perturb(mod_global, pvars = c("winrange500", "elevrange"), prange=c(0.1,0.1))
 detach(forests_df_t)
@@ -402,8 +432,9 @@ perturb_mod$coeff.table %>% as.tibble %>%
                            labels = gsub("\n", " ", coefflabel))) %>% 
   arrange(variable) %>% 
   kable(digits = 3)
-
 ```
+
+`r tabs("perturb", "Results of perturbation analysis. Random noise was added to the two Shannon measures to the range of 0.1")`
 
 Biggest changes are to the MW & LS values, but this does not change the conclusions and the sd is still reasonably small (SD is ~ 10% of the coefficient estimate). 
 
@@ -437,62 +468,54 @@ n <- 1500
 nsim <- 100
 out <- map_dfr(1:nsim, ~model_subsample(.x, forests_df_t, n))
 
-ggplot(data = out, aes(x = D)) + 
-  geom_histogram() + 
-  geom_vline(xintercept = globalr2)
-
-out_ns <- out %>% mutate(signif = ifelse((`2.5 %` > 0 & `97.5 %` > 0) | 
-                                           (`2.5 %` < 0 & `97.5 %` < 0), 1, 0)) %>% 
-  filter(signif == 0)
-
 out_narrow <- out %>% gather(measure, value, -D, -fvariable) %>% 
   mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
          measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
   filter(grepl("elevation", fvariable))
 
-res_narrow <- res_global %>% gather(measure, value, -fvariable, -variable) %>% 
-  mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
-         measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
-  filter(grepl("elevation", fvariable))
+res_narrow <- res_global %>% 
+  filter(variable %in% c("winrange500", "elevrange", "elevmean")) %>% 
+  select(fvariable, Coefficient = coef, LCI = `2.5 %`, UCI = `97.5 %`) %>% 
+  gather(measure, value, -fvariable)
+```
 
+```{r subsample_plot}
 ggplot(out_narrow, aes(x = "fvariable", y = value)) + 
   geom_jitter() + 
   facet_grid(measure~fvariable) + 
   geom_hline(data = res_narrow, aes(yintercept = value), colour = "red") + 
-  labs(x = "Variable", y = "Coefficient estimate") + 
+  labs(x = "", y = "Coefficient estimate") + 
   theme(axis.text.x=element_blank())
-
-out_summary <- group_by(out_narrow, fvariable, measure) %>% 
-  summarise(mean_val = mean(value), 
-            min_val = min(value), 
-            max_val = max(value), 
-            sd_val = sd(value)) 
-
-out_summary %>% kable(digits = 3)
-
-out_ns <- filter(out, `2.5 %` < 0 & `97.5 %` > 0) %>% 
-  group_by(fvariable) %>% 
-  summarise(prop_ns = n() / nsim) 
-
-out_ns %>% kable(digits = 3)
 ```
 
-In this plot, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
+`r figs("subsample", "Results of subsampling analysis. For 100 replicates, 1500 points were subsampled from the total dataset and the regression calculated. Red lines show the value of the coefficient when the regression is calculated using the full dataset")`
+
+In `r figs("subsample", display = "cite")`, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
+
+```{r comp_r2}
+ggplot(data = out, aes(x = D)) + 
+  geom_histogram() + 
+  geom_vline(xintercept = globalr2)
+```
+
+`r figs("subsample_r2", "$R^2$ distribution for each replicate in the subsampling analysis.")`
 
 ## Collinearity in regression coefficients
 
 I've tested this here due to concern that the coefficients for MW Elevation and LS Elevation look like mirror images of each other. 
 
-```{r}
+```{r coef_colin}
 coef_cov <- cov2cor(vcov(mod_global)) 
 
 coef_cov%>% 
   as.tibble(rownames = "variable") %>% 
-  #mutate(fvariable = factor(variable, levels = coefforder, 
-  #                          labels = gsub("\n", " ", coefflabel))) %>%
-  #arrange(fvariable) %>% 
+  mutate(fvariable = factor(variable, levels = coefforder, 
+                            labels = gsub("\n", " ", coefflabel))) %>%
+  arrange(fvariable) %>% 
   kable(digits = 2)
 ```
+
+`r tabs("coef_colin", "Pairwise correlations between coefficient estimates from the full model")`
 
 Correlation between elevrange and winrange, but not super high. 
 
@@ -506,7 +529,7 @@ Although the model does not display multicollinearity despite high correlation b
 4. *Common variance* Amount of variance in common with other variables
 5. *Total variance* Total amount of variance accounted for by the variable
 
-```{r}
+```{r commonality}
 ca_table <- res_global %>% 
   filter(fvariable != "Intercept") %>% 
   # structural coefficients
@@ -523,11 +546,13 @@ ca_table <- res_global %>%
 kable(ca_table, digits = 3)
 ```
 
+`r tabs("comm_global", "Commonality analysis for the global model")`
+
 # Final results and plots
 
 We will now plot the main effects from the full model. 
 
-```{r mod_vis, fig.width = 4.33071, fig.height = 6.496065}
+```{r FX_forests_results, fig.width = 4.33071, fig.height = 6.496065}
 # need to predict from the model then convert to the original scales
 pred_vals <- bind_rows(
   make_predictions(mod_global, pred = "elevmean", interval = TRUE)$predicted %>% 
@@ -603,17 +628,15 @@ bio15_plot <- ggplot(pred_vals %>% filter(covariate == "bio15"),
   labs(x = "Precipitation seasonality",
        y = "")
 
-res_plot <- plot_grid(winrange_plot, range_plot, mean_plot, 
+plot_grid(winrange_plot, range_plot, mean_plot, 
                       bio1_plot, bio12_plot, bio15_plot, 
                       ncol = 2)
-save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/FX_forest_results.jpg", 
-          res_plot, base_width = 4.33071, base_height = 6.496065)
-res_plot
 ```
 
+`r figs("res_plot", "Main effect estimates for the full model")`
 
 # Session Info
-```{r}
+```{r session}
 devtools::session_info()
 ```
 

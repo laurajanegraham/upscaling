@@ -13,7 +13,7 @@ header-includes:
 knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE, fig.width = 6.81102)
 ```
 
-## Required packages
+# Required packages
 
 In the first step, we load all of the required packages. Note that grainchanger (the package developed for this paper) can be installed using:
 
@@ -75,13 +75,13 @@ coefflabel <- c("Intercept", "MW Shannon (1km)", "LS Shannon", "Forest %",
                     "Urban %", "Temperature")
 
 # required for captioning and numbering tables and figures
-table_nums <- captioner(prefix = "Table AII.")
-figure_nums <- captioner(prefix = "Figure AII.")
+tabs <- captioner(prefix = "Table AII.")
+figs <- captioner(prefix = "Figure AII.")
 ```
 
-## Data
+# Data
 
-### Biological data
+## Biological data
 
 First we need to load in and spatialise the Jay (*Garrulus glandarius*) data. These were provided by Simon Gillings at the BTO. The data includes the relative abundance indices for the 1990 Atlas (index90) and for the 2010 Atlas (index10). We are using the 2010 Atlas data. 
 
@@ -94,7 +94,7 @@ jay_sp <- read_sf("~/DATA/ADMINISTRATIVE/bng/10km_grid_region.shp") %>%
   filter(!is.na(geometry))
 ```
 
-### Environmental data
+## Environmental data
 
 The data for which we want to use the upscaling approach on is Land Cover Map 2007, which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale and without the moving window at the 10km scale. As covariates, we will calculate forest (habitat) cover percentage, urban land cover percentage and from Worldclim mean annual temperature (bio1).
 
@@ -140,7 +140,7 @@ jay_df <- jay_sp %>% as.tibble %>% select(varorder) %>% mutate(bio1 = bio1/10)
 # /10 is due to way that worldclim stores the temperature data
 ```
 
-### Exploration and transformation
+## Exploration and transformation
 
 We have removed cells with 0 abundance because we are only really interested in predicting abundance presuming the species is present. Alternatively we could use all data and a hurdle model, however we chose to take the simpler approach. 
 
@@ -182,8 +182,9 @@ data_plot <- plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"),
 save_plot("~/Google Drive/SCALEFORES/Papers/Upscaling/figures/F4_jays_data_figure.jpg", 
           data_plot, base_width = 6.81102)
 data_plot
-figure_nums("spatial_plot", "A case study of the effect of habitat structure on Garrulus glandarius abundance. Study area showing the spatial distribution of (a) relative abundance index for G. glandarius and (b) scaled covariates (mean = 0; standard deviation = 1).")
 ```
+
+`r figs("spatial_plot", "A case study of the effect of habitat structure on Garrulus glandarius abundance. Study area showing the spatial distribution of (a) relative abundance index for G. glandarius and (b) scaled covariates (mean = 0; standard deviation = 1).")`
 
 How are the variables distributed and where are the correlations?
 
@@ -223,7 +224,7 @@ scale_this <- function(x) as.vector(scale(x))
 jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index10_logit, -index10), .funs = funs(scale_this))
 ```
 
-## Statistical model
+# Statistical model
 
 Our sample size is n = `r nrow(jay_df_t)`. 
 
@@ -250,7 +251,7 @@ Partial regression coefficient for window-based Shannon is larger than the lands
 
 The model explains `r round(globalr2*100, 2)`% of the variance in jay abundance. 
 
-## Model validation
+# Model validation
 
 ```{r global_validation}
 jay_df_t$resids <- mod_global$residuals
@@ -278,7 +279,7 @@ figure_nums("valid", "Residuals plotted against fitted values and all predictors
 
 There is still some patterning in the residuals, but overall a reasonable model fit. The lowest fitted value is `r round(min(fitted), 2)` and the highest is `r round(max(fitted), 2)`. Much better conformity to assumptions and range of predicted values than either the normal or binomial versions. 
 
-## Collinearity diagnostics
+# Collinearity diagnostics
 
 Due to the high correlations between the two Shannon measures and Forest %, we will use some in-depth collinearity diagnostics
 
@@ -287,7 +288,7 @@ Due to the high correlations between the two Shannon measures and Forest %, we w
 3. Stability under perturbation analysis
 4. Stability under data sub-sampling
 
-### Variance inflation factor
+## Variance inflation factor
 
 ```{r vif}
 vif(mod_global) %>% kable(digits = 2, col.names = c("VIF"))
@@ -296,7 +297,7 @@ table_nums("vif", "Variance inflation factors for each term in the global model"
 
 Although these variance inflation factors may seem high, due to the large sample size (and that we mostly still detect effects) we do not see these as problematic; although it may explain why we do not detect an effect of LS Shannon. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
 
-### Condition index and variance decomposition
+## Condition index and variance decomposition
 
 See [Callaghan and Chen 2008](http://pareonline.net/getvn.asp?v=13&n=5) for information on how to interpret condition indices and variance decomposition (but use D. Belsley, E. Kuh, and R. Welsch (1980). Regression Diagnostics. Wiley. as citation). In short, rows in the below table with a high condition index (first column, high is > 10 - moderate to strong collinearity, > 30 - severe collinearity) which are associated with high variance of regression estimate (the rest of the table) will cause a problem in the analysis. 
 
@@ -311,7 +312,7 @@ table_nums("condition", "Condition index and variance decomposition")
 
 The highest condition index is `r round(max(mod_diag$CI), 2)`; this puts us in the "weak-to-moderate collinearity" range. There is high variance decomposition associated with the MW & LS Shannon (particularly LS) coefficient estimates. We will check the effect of this with some further tests on the data. 
 
-### Stability under perturbation analysis
+## Stability under perturbation analysis
 
 We will add some random noise to the two environmental heterogeneity measures to evaluate collinearity. 
 
@@ -336,7 +337,7 @@ table_nums("perturb", "Results of perturbation analysis. Random noise was added 
 
 Again, there may be some issues with LS Shannon. 
 
-### Stability under data sub-sampling
+## Stability under data sub-sampling
 
 Now let's test this by checking the model results are stable under subsampling. 
 
@@ -397,7 +398,7 @@ figure_nums("subsample_r2", "$R^2$ distribution for each replicate in the subsam
 
 In this plot, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(jay_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant). As is R2. 
 
-## Commonality analysis
+# Commonality analysis
 
 Although the model does not display multicollinearity despite high correlation between the two Shannon measures, we will apply commonality analysis. This approach allows us to understand the importance of different variables despite any collinearity in the model. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanations of this approach. For each variablem we will calculate: 
 
