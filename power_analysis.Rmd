@@ -1,5 +1,5 @@
 ---
-title: "Appendix V: Power analysis simulations for correlated variables"
+title: "Appendix IV: Power analysis simulations for correlated variables"
 output: pdf_document
 ---
 

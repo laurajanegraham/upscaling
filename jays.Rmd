@@ -580,6 +580,29 @@ temp_slope <- paste(round(c(-2.06, 4.00) *
 
 On the measurement scale, MW Shannon (1km) slope is significant in Temperature range `r winshannon_slope` (all but the lowest temperatures) and Temperature slope is significant in MW Shannon (1km) range `r temp_slope` (the full range of the data)
 
+# Collinearity diagnostics of the final model
+
+We do not expect collinearity in the final model due to low correlations between variables, however we have included the variance inflation factor and condition index/variance decomposition tests to clarify. 
+
+## Variance inflation factor
+
+```{r vif_mw}
+vif(mod_mw) %>% kable(digits = 2, col.names = c("VIF"))
+```
+
+`r tabs("vif_mw", "Variance inflation factors for each term in the final model")`
+
+## Condition index and variance decomposition
+
+```{r condition_mw}
+mod_diag <- colldiag(mod_mw) %>% lapply(as.data.frame)
+mod_diag <- do.call("cbind", mod_diag)
+names(mod_diag) <- c("CI", "Intercept", "MW Shannon", "Urban %", "Temp")
+kable(mod_diag, digits = 3)
+```
+
+`r tabs("condition_mw", "Condition index and variance decomposition")`
+
 # Session Info
 ```{r}
 session <- devtools::session_info()
