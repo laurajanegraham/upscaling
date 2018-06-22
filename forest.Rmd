@@ -4,10 +4,8 @@ output:
   pdf_document:
     toc: true
     number_sections: true
-    fig_caption: yes
 header-includes:
     - \usepackage{booktabs}
-    - \usepackage{caption}
 ---
 
 ```{r, include=FALSE}
@@ -16,8 +14,8 @@ knitr::opts_chunk$set(echo = TRUE,
                       warning = FALSE, 
                       fig.path = 'figures/',
                       dpi = 300,
-                      dev = c('tiff', 'png'),
-                      fig.width = 6.496065)
+                      dev = c('pdf', 'tiff', 'png'),
+                      fig.width = 6.496065) # width of full page figure for Ecology Letters
 ```
 
 # Required packages
@@ -75,6 +73,8 @@ figs <- captioner(prefix = "Figure AIII.")
 ```
 
 # Data
+
+Note that file paths to data sources are hard coded. These will need updating to match folder structure. A search for `~/` in the document will find these. 
 
 ## Biological data
 
@@ -188,7 +188,6 @@ forests_sp <- st_as_sf(eu_grid) %>%
 save(forests_sp, file="results/forests_covariates.Rda")
 ```
 
-
 `r load("results/forests_runtime.Rda")`
 
 Upscaling 100m resolution elevation data for Europe to 0.5 degree resolution using a 500 m radius window took: `r round(run_time, 2)` minutes. 
@@ -204,7 +203,7 @@ forests_df <- forests_sp %>% as.tibble %>% select(varorder) %>% na.omit %>%
 
 What do the variables look like spatially?
 
-```{r F5_forests_data_figure}
+```{r F4_forests_data_figure}
 forests_narrow <- forests_sp %>% 
   select(varorder) %>% 
   mutate_at(.vars = vars(-sprich, -geometry), .funs = funs(scale)) %>% 
@@ -259,22 +258,30 @@ ggpairs(
   upper = list(
     continuous = wrap('cor', method = "spearman")
   ),
+  lower = list(
+    continuous = wrap('points', alpha = 0.3, size =0.1)
+  ),
   columnLabels = varlabel
 )
 ```
 
-`r figs("pairs", paste("Pairs plot of *Garrulus glandarius* relative abundance and covariates. Correlations shown are Spearman's", expression(rho), "."))`
+`r figs("pairs", "Pairs plot of *Garrulus glandarius* relative abundance and covariates. Correlations shown are Spearman's $\\rho$.")`
 
 MW Elevation is the lowest correlation except for total precipitation (bio12). Highest correlation is with precipitation seasonality (bio15). Our expectation that variation in elevation would be important is supported here by the fact that the species richness correlation with mean elevation is lower. Species richness ideal for Poisson distribution; right skew to MW Elevation and LS elevation, Mean elevation, as well as the precipitation variables - need to transform. 
 
 ```{r transform}
 # optimise to find optimal value for log transform
 skew.score <- function(c, x) (skewness(log(x + c)))^2
-cs <- tibble(winrange500 = optimise(skew.score, c(0, 20), x = forests_df$winrange500)$minimum,
-             elevrange = optimise(skew.score, c(0, 20), x = forests_df$elevrange)$minimum,
-             elevmean = optimise(skew.score, c(0, 20), x = forests_df$elevmean)$minimum,
-             bio12 = optimise(skew.score, c(0, 20), x = forests_df$bio12)$minimum,
-             bio15 = optimise(skew.score, c(0, 20), x = forests_df$bio15)$minimum)
+cs <- tibble(winrange500 = optimise(skew.score, c(0, 20), 
+                                    x = forests_df$winrange500)$minimum,
+             elevrange = optimise(skew.score, c(0, 20), 
+                                  x = forests_df$elevrange)$minimum,
+             elevmean = optimise(skew.score, c(0, 20),
+                                 x = forests_df$elevmean)$minimum,
+             bio12 = optimise(skew.score, c(0, 20), 
+                              x = forests_df$bio12)$minimum,
+             bio15 = optimise(skew.score, c(0, 20), 
+                              x = forests_df$bio15)$minimum)
 
 
 forests_df_t <- select(forests_df, varorder) %>% 
@@ -296,7 +303,7 @@ means <- forests_df_t %>%
   left_join(gather(cs, covariate, c))
 ```
 
-We scaled the data (mean = 0, sd = 1) so that the partial regression coefficients are comparable. 
+We scaled the data (mean = 0, SD = 1) so that the partial regression coefficients are comparable. 
 
 ```{r scale_data}
 scale_this <- function(x) as.vector(scale(x))
@@ -373,7 +380,7 @@ plotResiduals(forests_df_t$bio15,
 
 `r figs("resid_pred", "Residual vs predictor plots for checking model specification")`
 
-Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms.
+Based on the residual diagnostics, have gone with a negative binomial model due to overdispersion. The earlier version of the diagnostics also found patterns with temperature (bio1) and precipitation (bio12), hence the inclusion of their quadratic terms. The lowest fitted value is `r round(min(mod_global$fitted.values), 2)` and the highest is `r round(max(mod_global$fitted.values), 2)`.
 
 # Collinearity diagnostics
 
@@ -388,12 +395,12 @@ Due to the high correlation in the data, we will use some in-depth collinearity 
 ## Variance inflation factor
 
 ```{r vif}
-vif(mod_global)
+vif(mod_global) %>% kable(digits = 2, col.names = c("VIF"))
 ```
 
 `r tabs("vif", "Variance inflation factors for each term in the global model")`
 
-Generally low. All below 10 except elevrange, and even then the large sample size means this is not that large. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
+Generally low. All below 10 except LS elevation, and even then the large sample size means this is not that large. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
 
 ## Condition index and variance decomposition
 
@@ -418,7 +425,9 @@ We will add some random noise to the two environmental heterogeneity measures to
 
 ```{r perturb}
 attach(forests_df_t)
-perturb_mod <- perturb(mod_global, pvars = c("winrange500", "elevrange"), prange=c(0.1,0.1))
+perturb_mod <- perturb(mod_global, 
+                       pvars = c("winrange500", "elevrange"), 
+                       prange=c(0.1,0.1))
 detach(forests_df_t)
 
 perturb_mod$coeff.table %>% as.tibble %>% 
@@ -436,7 +445,7 @@ perturb_mod$coeff.table %>% as.tibble %>%
 
 `r tabs("perturb", "Results of perturbation analysis. Random noise was added to the two Shannon measures to the range of 0.1")`
 
-Biggest changes are to the MW & LS values, but this does not change the conclusions and the sd is still reasonably small (SD is ~ 10% of the coefficient estimate). 
+Biggest changes are to the MW & LS values, but this does not change the conclusions and the SD is still reasonably small (SD is ~ 10% of the coefficient estimate). 
 
 ## Stability under data sub-sampling
 
@@ -444,7 +453,7 @@ Now let's test this by checking the model results are stable under subsampling.
 
 NB This will reduce the power to detect significant relationships (increase Type II errors).
 
-```{r model_subsample, fig.width = 12}
+```{r model_subsample}
 model_subsample <-function(x, dat, n) { 
   
   dat <- sample_n(dat, n)
@@ -490,7 +499,7 @@ ggplot(out_narrow, aes(x = "fvariable", y = value)) +
 
 `r figs("subsample", "Results of subsampling analysis. For 100 replicates, 1500 points were subsampled from the total dataset and the regression calculated. Red lines show the value of the coefficient when the regression is calculated using the full dataset")`
 
-In `r figs("subsample", display = "cite")`, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to subsampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
+In `r figs("subsample", display = "cite")`, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(forests_df_t)`). The estimates are reasonably robust to sub-sampling the data (not much variation in estimates and very few changes to non-significant - precipitation is the exception here, but this was close to non-significant previously, reducing power has meant this cannot be estimated).
 
 ```{r comp_r2}
 ggplot(data = out, aes(x = D)) + 
@@ -502,26 +511,23 @@ ggplot(data = out, aes(x = D)) +
 
 ## Collinearity in regression coefficients
 
-I've tested this here due to concern that the coefficients for MW Elevation and LS Elevation look like mirror images of each other. 
+Finally, we need to check that we do not have extreme collinearity in the parameter estimates. 
 
 ```{r coef_colin}
 coef_cov <- cov2cor(vcov(mod_global)) 
 
 coef_cov%>% 
   as.tibble(rownames = "variable") %>% 
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable) %>% 
   kable(digits = 2)
 ```
 
 `r tabs("coef_colin", "Pairwise correlations between coefficient estimates from the full model")`
 
-Correlation between elevrange and winrange, but not super high. 
+Correlation between LS elevation and MW elevation (500m), but not super high. 
 
 # Commonality analysis
 
-Although the model does not display multicollinearity despite high correlation between the two Shannon measures, we will apply commonality analysis. This approach allows us to understand the importance of different variables despite any collinearity in the model. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanation of the approach. For each variablem we will calculate: 
+Although the model does not display multicollinearity despite high correlation between the two Shannon measures, we will apply commonality analysis. This approach allows us to understand the importance of different variables despite any collinearity in the model. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanation of the approach. For each variable we will calculate: 
 
 1. *Beta coefficients* the standardised partial regression coefficients
 2. *Structural coefficients* Squared Pearson correlation between the variable and the fitted values from the model
@@ -543,6 +549,8 @@ ca_table <- res_global %>%
   select(fvariable, beta = coef, `2.5 %`, `97.5 %`, r_s, r_s2, Unique, Common, Total) %>% 
   arrange(fvariable)
 
+write_csv(ca_table, "tables/forests_commonality.csv")
+
 kable(ca_table, digits = 3)
 ```
 
@@ -552,7 +560,7 @@ kable(ca_table, digits = 3)
 
 We will now plot the main effects from the full model. 
 
-```{r FX_forests_results, fig.width = 4.33071, fig.height = 6.496065}
+```{r F6_forests_results, fig.width = 4.33071, fig.height = 6.496065}
 # need to predict from the model then convert to the original scales
 pred_vals <- bind_rows(
   make_predictions(mod_global, pred = "elevmean", interval = TRUE)$predicted %>% 
@@ -636,7 +644,9 @@ plot_grid(winrange_plot, range_plot, mean_plot,
 `r figs("res_plot", "Main effect estimates for the full model")`
 
 # Session Info
-```{r session}
-devtools::session_info()
+```{r}
+session <- devtools::session_info()
+session[[1]]
+session[[2]] %>% kable
 ```
 
