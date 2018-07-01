@@ -51,14 +51,14 @@ figs <- captioner(prefix = "Figure AI.")
 
 ```{r F1_methods_plot, fig.width = 4.33071, fig.height = 2.88714}
 ls <- nlm_random(10, 10) %>% as.data.frame(xy = TRUE)
-w1 <- data.frame(x = rep(c(0.5, 1.5, 2.5), times = 3), 
-                 y = rep(c(7.5, 8.5, 9.5), each = 3))
+w1 <- data.frame(x = c(0, 3, 3, 0, 0),
+                 y = c(7, 7, 10, 10, 7))
 w2 <- mutate(w1, x = x+1)
 w3 <- mutate(w2, x = x+1)
 
 w1_plot <- ggplot() + 
   geom_raster(data = ls, aes(x = x, y = y, fill = layer)) + 
-  geom_raster(data = w1, aes(x = x, y = y), fill = "grey", alpha = 0.7) + 
+  geom_polygon(data = w1, aes(x =  x, y = y), fill = "grey", colour = "black", alpha = 0.7) + 
   annotate("text", x = 1.5, y = 8.5, 
            label = "italic(f(x))", parse = TRUE, size = 2.5) +
   annotate("text", x = 0, y = 11.2, hjust = 0, 
@@ -84,7 +84,7 @@ w1_plot <- ggplot() +
 
 w2_plot <- ggplot() + 
   geom_raster(data = ls, aes(x = x, y = y, fill = layer)) + 
-  geom_raster(data = w2, aes(x = x, y = y), fill = "grey", alpha = 0.7) + 
+  geom_polygon(data = w2, aes(x =  x, y = y), fill = "grey", colour = "black", alpha = 0.7) + 
   annotate("text", x = 2.5, y = 8.5, 
            label = "italic(f(x))", parse = TRUE, size = 2.5) +
   annotate("text", x = 0, y = 11.2, hjust = 0, 
@@ -113,7 +113,7 @@ w2_plot <- ggplot() +
 
 w3_plot <- ggplot() + 
   geom_raster(data = ls, aes(x = x, y = y, fill = layer)) + 
-  geom_raster(data = w3, aes(x = x, y = y), fill = "grey", alpha = 0.7) + 
+  geom_polygon(data = w3, aes(x =  x, y = y), fill = "grey", colour = "black", alpha = 0.7) + 
   annotate("text", x = 3.5, y = 8.5, 
            label = "italic(f(x))", 
            parse = TRUE, 
@@ -260,7 +260,8 @@ cat_res <- ldply(sim_ls, function(x) {
 # combination for plotting
 cont_ls_df <- ldply(sim_ls, function(x) x$ls_df) %>% 
   filter(reps == 1) %>% 
-  mutate(ls_type = "Continuous") 
+  mutate(ls_type = "Continuous",
+         fract_dim = factor(paste0("Fractal dimension = ", fract_dim))) 
 
 
 cat_ls_df <- ldply(sim_ls, function(x) {
@@ -284,7 +285,7 @@ cont_ls_plot <- ggplot(cont_ls_df, aes(x = x, y = y, fill = layer)) +
         axis.line = element_blank(), 
         axis.ticks = element_blank(),
         strip.background = element_blank(), 
-        strip.text.y = element_blank(),
+        #strip.text.y = element_blank(),
         legend.position = "none",
         panel.border = element_blank())
 
@@ -298,7 +299,7 @@ cat_ls_plot <- ggplot(cat_ls_df, aes(x = x, y = y, fill = layer)) +
         axis.line = element_blank(), 
         axis.ticks = element_blank(),
         strip.background = element_blank(), 
-        strip.text.y = element_blank(),
+        strip.text.y = element_text(colour = "white"),
         legend.position = "none",
         panel.border = element_blank())
 
@@ -310,10 +311,12 @@ res_df <- bind_rows(cont_res, cat_res) %>%
                                      "MW Shannon")))
 
 res_plot <- ggplot(res_df, aes(x = radius, y = val, fill = measure)) + 
-  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + coord_flip() + 
+  geom_boxplot(lwd = 0.1, outlier.size = 0.5) + 
+  coord_flip() + 
   scale_fill_grey("") + 
   facet_wrap(~fract_dim, ncol = 1) +
-  xlab("Moving window radius") + ylab("") 
+  xlab("Moving window radius") + 
+  ylab("Moving window measure") 
 
 plot_grid(cont_ls_plot, cat_ls_plot, res_plot, 
           align = 'h', 
