@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.path = 'figures/',
                       dpi = 300,
                       dev = c('pdf', 'tiff', 'png'),
-                      fig.width = 6.496065) # width of full page figure for Ecology Letters
+                      fig.width = 6.496065) 
 ```
 
 # Required packages
@@ -146,7 +146,7 @@ for(cell_no in 1:length(eu_grid)) {
 rasters.mosaicargs <- elev_cell_100
 names(rasters.mosaicargs) <- NULL
 rasters.mosaicargs$fun <- mean
-rasters.mosaicargs$filename <- '~/DATA/PHYSICAL/elev/eu_dem/eudem_100m_aggregated.tif'
+rasters.mosaicargs$filename <- '~/DATA/PHYSICAL/elev/eu_dem_1.1/eudem_100m_aggregated.tif'
 rasters.mosaicargs$overwrite <- TRUE
 rasters.mosaicargs$na.rm <- TRUE
 
