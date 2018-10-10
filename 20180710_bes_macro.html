@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Bridging landscape ecology and macroecology</title>
+    <meta charset="utf-8">
+    <meta name="author" content="Laura Graham, Rebecca Spake, Simon Gillings, Kevin Watts, Felix Eigenbrod" />
+    <link href="libs/remark-css/default.css" rel="stylesheet" />
+    <link rel="stylesheet" href="C:\Users\lg1u16\GIT_PROJECTS\presentation_images\svm-xaringan-style.css" type="text/css" />
+  </head>
+  <body>
+    <textarea id="source">
+class: center, middle, inverse, title-slide
+
+# Bridging landscape ecology and macroecology
+## <br/>Incorporating fine-scale heterogeneity in broad-scale models
+### Laura Graham, Rebecca Spake, Simon Gillings, Kevin Watts, Felix Eigenbrod
+
+---
+
+
+
+
+class: center, middle
+
+# How do climate and land-use change interactively affect ecological processes?
+
+---
+
+# Two key problems
+
+--
+
+&lt;br/&gt;
+
+Conceptual
+
+- The scale at which drivers affect responses varies
+- As does the resolution at which broad-scale patterns of ecological processes emerges
+
+&lt;br/&gt;
+
+--
+
+Data
+
+- The scale we measure this stuff at varies too
+- Ecological response (e.g. species richness) often available at coarse resolutions
+
+---
+
+# Combining data at different scales
+
+- Need to aggregate fine-scale data to coarse resolutions without losing information about within-unit variation
+
+--
+
+- Using a moving window to calculate heterogeneity before aggregating retains information about spatial structure at an appropriate scale
+
+--
+
+.center[![](figures/methods.jpg)]
+
+---
+
+
+
+# Case study: Abundance of Eurasian Jay
+
+.pull-left[
+
+![](20180710_bes_macro_files/figure-html/unnamed-chunk-1-1.png)&lt;!-- --&gt;
+
+Source: BTO Atlas 2007--2011
+
+]
+
+.pull-right[
+
+.center[![](figures/jay.png)]
+
+]
+
+---
+
+# Case study: Abundance of Eurasian Jay
+
+.center[
+
+Abundance ~ MW Shannon + LS Shannon + % Forest + % Urban + Temperature + Temperature x MW Shannon + Temperature x LS Shannon
+
+&lt;table&gt;
+ &lt;thead&gt;
+  &lt;tr&gt;
+   &lt;th style="text-align:left;"&gt; Covariate &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Unique &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Common &lt;/th&gt;
+   &lt;th style="text-align:right;"&gt; Total &lt;/th&gt;
+  &lt;/tr&gt;
+ &lt;/thead&gt;
+&lt;tbody&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; MW Shannon (1km) &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.011 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.064 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.074 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; LS Shannon &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.047 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.047 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; Forest % &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.000 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.024 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.024 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; MW Shannon : Temperature &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.010 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.016 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.026 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; LS Shannon : Temperature &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.007 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.025 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.032 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; Urban % &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.018 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.039 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.057 &lt;/td&gt;
+  &lt;/tr&gt;
+  &lt;tr&gt;
+   &lt;td style="text-align:left;"&gt; Temperature &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.182 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; -0.013 &lt;/td&gt;
+   &lt;td style="text-align:right;"&gt; 0.169 &lt;/td&gt;
+  &lt;/tr&gt;
+&lt;/tbody&gt;
+&lt;/table&gt;
+]
+
+---
+
+# Case study: Abundance of Eurasian Jay
+.center[
+
+Abundance ~ MW Shannon + % Urban + Temperature + Temperature x MW Shannon
+
+![](20180710_bes_macro_files/figure-html/unnamed-chunk-3-1.png)&lt;!-- --&gt;
+]
+
+---
+
+# Conclusions
+
+- *Case study*: Importance of habitat evenness at local scales increases with increasing temperatures
+
+--
+
+- Moving window approach to data-aggregation provides stronger information (in this case) than traditional aggregation measures
+
+--
+
+- We can combine data that vary and/or are measured at different spatial resolutions
+
+--
+
+- Method has broader utility beyond spatial ecology
+
+  - Combining conflicting temporal resolutions
+  - Broad range of research areas such as social sciences; geology; agricultural sciences
+  
+--
+
+- Available as `grainchanger` R package [https://github.com/laurajanegraham/grainchanger](https://github.com/laurajanegraham/grainchanger)
+    </textarea>
+<script src="https://remarkjs.com/downloads/remark-latest.min.js"></script>
+<script>var slideshow = remark.create({
+"highlightStyle": "github",
+"highlightLines": true,
+"countIncrementalSlides": false
+});
+if (window.HTMLWidgets) slideshow.on('afterShowSlide', function (slide) {
+  window.dispatchEvent(new Event('resize'));
+});
+(function() {
+  var d = document, s = d.createElement("style"), r = d.querySelector(".remark-slide-scaler");
+  if (!r) return;
+  s.type = "text/css"; s.innerHTML = "@page {size: " + r.style.width + " " + r.style.height +"; }";
+  d.head.appendChild(s);
+})();</script>
+
+<script>
+(function() {
+  var i, text, code, codes = document.getElementsByTagName('code');
+  for (i = 0; i < codes.length;) {
+    code = codes[i];
+    if (code.parentNode.tagName !== 'PRE' && code.childElementCount === 0) {
+      text = code.textContent;
+      if (/^\\\((.|\s)+\\\)$/.test(text) || /^\\\[(.|\s)+\\\]$/.test(text) ||
+          /^\$\$(.|\s)+\$\$$/.test(text) ||
+          /^\\begin\{([^}]+)\}(.|\s)+\\end\{[^}]+\}$/.test(text)) {
+        code.outerHTML = code.innerHTML;  // remove <code></code>
+        continue;
+      }
+    }
+    i++;
+  }
+})();
+</script>
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+(function () {
+  var script = document.createElement('script');
+  script.type = 'text/javascript';
+  script.src  = 'https://cdn.bootcss.com/mathjax/2.7.1/MathJax.js?config=TeX-MML-AM_CHTML';
+  if (location.protocol !== 'file:' && /^https?:/.test(script.src))
+    script.src  = script.src.replace(/^https?:/, '');
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+  </body>
+</html>
