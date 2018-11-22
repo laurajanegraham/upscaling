@@ -2,32 +2,43 @@ library(raster)
 library(NLMR)
 library(landscapetools)
 library(grainchanger)
-library(furrr)
 library(tidyverse)
+library(furrr)
 
 plan(multiprocess)
-
+strt <- Sys.time()
 # 1. Create the landscapes and calculate LS and MW measures 
 # Set up spatial autocorrelation parameters
-system.time(df <- bind_rows(
+df <- bind_rows(
   tibble(sa_scenario = "No spatial autocorrelation", sa_values = rep(0.1, 100)),
-  tibble(sa_scenario = "Low, varied autocorrelation", sa_values = seq(0.1, 0.5, length.out = 100)),
+  tibble(sa_scenario = "Low, varied spatial autocorrelation", sa_values = seq(0.1, 0.5, length.out = 100)),
   tibble(sa_scenario = "Varied spatial autocorrelation", sa_values = seq(0.1, 1, length.out = 100)),
   tibble(sa_scenario = "High, varied spatial autocorrelation", sa_values = seq(0.5, 1, length.out = 100)),
   tibble(sa_scenario = "High spatial autocorrelation", sa_values = rep(1, 100))
 ) %>% 
   # create the continuous and categorical landscapes
-  mutate(cont_ls = map(sa_values, function(x) nlm_fbm(ncol = 65, nrow = 65, fract_dim = x)),
+  mutate(cont_ls = future_map(sa_values, function(x) nlm_fbm(ncol = 50, nrow = 50, fract_dim = x)),
          # the categorical map has a random proportion between landscapes for each landscape
-         cat_ls = map(cont_ls, function(x) util_classify(x, weighting = diff(c(0, sort(runif(4)), 1)))), # need to change code to save the weights
+         cat_wt = future_map(sa_values, function(x) diff(c(0, sort(runif(4)), 1))),
+         cat_ls = future_map2(cont_ls, cat_wt, function(x, wt) util_classify(x, weighting = wt)),
          # calculate LSM
-         cont_lsm = map_dbl(cont_ls, function(x) x %>% raster::values() %>% var),
-         cat_lsm = map_dbl(cat_ls, function(x) diversity(x, lc_class = 0:4))) %>% 
-  crossing(window = c(1, 4, 7, 17, 27)) %>% 
+         cont_lsm = future_map_dbl(cont_ls, function(x) x %>% raster::values() %>% var),
+         cat_lsm = future_map_dbl(cat_ls, function(x) diversity(x, lc_class = 0:4)))
+
+
+df <- df %>% 
+  crossing(window = c(1)) %>% 
   mutate(cont_ls_pad = map2(cont_ls, window, create_torus),
-         cat_ls_pad = map2(cat_ls, window, create_torus),
+         cat_ls_pad = map2(cat_ls, window, create_torus))
+
+,
          # calculate MWM
-         cont_mwm = future_map2_dbl(cont_ls_pad, window, function(ls, w) winmove(ls, radius = w, type = "rectangle", fn = "var") %>% trim %>% raster::values() %>% mean),
-         cat_mwm = future_map2_dbl(cat_ls_pad, window, function(ls, w) winmove(ls, radius = w, type = "rectangle", fn = "diversity", lc_class = 0:4) %>% trim %>% raster::values() %>% mean)
-  )
-)
+         cont_mwm = future_map2_dbl(cont_ls_pad, window, function(ls, w) winmove(ls, d = w, type = "rectangle", fun = "var") %>% trim %>% raster::values() %>% mean),
+         cat_mwm = future_map2_dbl(cat_ls_pad, window, function(ls, w) winmove(ls, d = w, type = "rectangle", fun = "shei", lc_class = 0:4) %>% trim %>% raster::values() %>% mean)
+  ) %>% select(-cont_ls, -cat_ls, -cont_ls_pad, -cat_ls_pad)
+
+
+cat_test
+
+
+save(list(df = df, runtime = difftime(Sys.time(), strt)), file = tempfile(tmpdir = ".", fileext = ".Rda"))

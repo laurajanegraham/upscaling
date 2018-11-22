@@ -37,13 +37,13 @@ inv.logit <- function(value, eps) {
 }
 
 # labelling
-varorder <- c("index10", "winshannon", "lsshannon", "habitat", "urban", "bio1")
+varorder <- c("index10", "winshannon1000", "lsshannon", "habitat", "urban", "bio1")
 
 varlabel <- c("Abundance (2010 Atlas)", "MW Shannon\n(1km)", "LS Shannon", 
               "Forest %", "Urban %", "Temperature")
 
-coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
-               "winshannon:bio1", "lsshannon:bio1",
+coefforder <- c("(Intercept)", "winshannon1000", "lsshannon", "habitat", 
+               "winshannon1000:bio1", "lsshannon:bio1",
                "urban", "bio1")
 
 coefflabel <- c("Intercept", "MW Shannon (1km)", "LS Shannon", "Forest %", 
@@ -164,8 +164,8 @@ Source: BTO Atlas 2007--2011
 Abundance ~ MW Shannon + LS Shannon + % Forest + % Urban + Temperature + Temperature x MW Shannon + Temperature x LS Shannon
 
 ```{r}
-mod_global <- lm(index10logit ~ winshannon + lsshannon + habitat + urban + bio1 +
-                   bio1:lsshannon + bio1:winshannon, 
+mod_global <- lm(index10logit ~ winshannon1000 + lsshannon + habitat + urban + bio1 +
+                   bio1:lsshannon + bio1:winshannon1000, 
                  data = jay_df_t, na.action = na.fail)
 
 source("R/ca_glm.R")
@@ -187,19 +187,19 @@ calc_commonality(mod_global)$CCTotalbyVar %>%
 Abundance ~ MW Shannon + % Urban + Temperature + Temperature x MW Shannon
 
 ```{r, fig.width = 15, fig.height = 8}
-mod_mw <- lm(index10logit ~ urban + winshannon * bio1, 
+mod_mw <- lm(index10logit ~ urban + winshannon1000 * bio1, 
                  data = jay_df_t, na.action = na.fail)
 
 pred_vals <- bind_rows(
   make_predictions(mod_mw, pred = "urban", interval = TRUE)$predicted %>% 
     select(index10logit, ymax, ymin, pred = urban) %>% 
     mutate(covariate = "urban"),
-  make_predictions(mod_mw, pred = "bio1", modx = "winshannon", interval = TRUE)$predicted %>% 
+  make_predictions(mod_mw, pred = "bio1", modx = "winshannon1000", interval = TRUE)$predicted %>% 
     select(index10logit, ymax, ymin, modx_group, pred = bio1) %>% 
-    mutate(covariate = "bio1", modx = "winshannon"),
-  make_predictions(mod_mw, pred = "winshannon", modx = "bio1", interval = TRUE)$predicted %>%
-    select(index10logit, ymax, ymin, modx_group, pred = winshannon) %>% 
-    mutate(covariate = "winshannon", modx = "bio1")) %>% 
+    mutate(covariate = "bio1", modx = "winshannon1000"),
+  make_predictions(mod_mw, pred = "winshannon1000", modx = "bio1", interval = TRUE)$predicted %>%
+    select(index10logit, ymax, ymin, modx_group, pred = winshannon1000) %>% 
+    mutate(covariate = "winshannon1000", modx = "bio1")) %>% 
   as.tibble %>% 
   mutate_at(c("index10logit", "ymin", "ymax"), inv.logit, eps) %>% 
   left_join(means) %>% 
@@ -213,7 +213,7 @@ pred_vals <- bind_rows(
          modx_label = fct_reorder(modx_label, modx_value))
 
 # plot the results
-ggplot(pred_vals %>% filter(covariate == "winshannon"), 
+ggplot(pred_vals %>% filter(covariate == "winshannon1000"), 
                      aes(x = pred, y = index10logit, group = modx_label)) + 
   geom_line(aes(lty = modx_label)) + 
   scale_linetype_manual(name = expression("Temperature (" * degree * "C)"), 
