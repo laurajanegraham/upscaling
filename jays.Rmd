@@ -71,9 +71,9 @@ varorder <- c("index10", "winshannon50", "winshannon100", "winshannon500",
               "winshannon1000", "winshannon1500", "winshannon3500", "lsshannon", 
               "habitat", "urban", "bio1")
 
-varlabel <- c("Abundance (2010 Atlas)", "MW Shannon\n(0.1 km)", 
-              "MW Shannon\n(0.2km)", "MW Shannon\n(1km)", "MW Shannon\n(2km)", 
-              "MW Shannon\n(3km)", "MW Shannon\n(7km)", "LS Shannon", 
+varlabel <- c("Abundance (2010 Atlas)", "MWDA Shannon\n(50 m)", 
+              "MWDA Shannon\n(100 m)", "MWDA Shannon\n(500 m)", "MWDA Shannon\n(1 km)", 
+              "MWDA Shannon\n(1.5 km)", "MWDA Shannon\n(3.5 km)", "SDA Shannon", 
               "Forest %", "Urban %", "Temperature")
 
 # for initial tables from models
@@ -83,10 +83,10 @@ coefforder <- c("(Intercept)", "winshannon50", "winshannon100", "winshannon500",
               "winshannon:bio1", "lsshannon:bio1",
               "urban", "bio1")
 
-coefflabel <- c("Intercept", "MW Shannon\n(0.1 km)", 
-              "MW Shannon\n(0.2km)", "MW Shannon\n(1km)", "MW Shannon\n(2km)", 
-              "MW Shannon\n(3km)", "MW Shannon\n(7km)", "LS Shannon", "Forest %", 
-              "MW Shannon : Temperature", "LS Shannon : Temperature", 
+coefflabel <- c("Intercept", "MW Shannon\n(50 m)", 
+              "MWDA Shannon\n(100 m)", "MWDA Shannon\n(500 m)", "MWDA Shannon\n(1 km)", 
+              "MWDA Shannon\n(1.5 km)", "MWDA Shannon\n(3.5 km)", "SDA Shannon", "Forest %", 
+              "MWDA Shannon : Temperature", "SDA Shannon : Temperature", 
               "Urban %", "Temperature")
 
 # required for captioning and numbering tables and figures
@@ -205,7 +205,7 @@ What do the variables look like spatially?
 jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry) %>% 
-  mutate(facet = "Relative abundance index",
+  mutate(facet = "",
          fvariable = factor(variable, levels = varorder, labels = varlabel))
 
 jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
@@ -219,7 +219,7 @@ jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) +
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"),
         panel.border = element_blank())
 
-cov_plot <- ggplot(jay_narrow %>% filter(variable != "index10")) + 
+cov_plot <- ggplot(jay_narrow %>% filter(variable %in% c("winshannon100", "habitat", "urban", "bio1"))) + 
   geom_sf(aes(fill = value), colour = NA) +
   coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "") + facet_wrap(~fvariable) + 
