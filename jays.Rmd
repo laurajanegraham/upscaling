@@ -83,7 +83,7 @@ coefforder <- c("(Intercept)", "winshannon50", "winshannon100", "winshannon500",
               "winshannon:bio1", "lsshannon:bio1",
               "urban", "bio1")
 
-coefflabel <- c("Intercept", "MW Shannon\n(50 m)", 
+coefflabel <- c("Intercept", "MWDA Shannon\n(50 m)", 
               "MWDA Shannon\n(100 m)", "MWDA Shannon\n(500 m)", "MWDA Shannon\n(1 km)", 
               "MWDA Shannon\n(1.5 km)", "MWDA Shannon\n(3.5 km)", "SDA Shannon", "Forest %", 
               "MWDA Shannon : Temperature", "SDA Shannon : Temperature", 
@@ -254,7 +254,7 @@ rplot(corrs, shape = 15, print_cor = TRUE)
 
 `r figs("corrs", "Pairwise Spearman correlations between *Garrulus glandarius* relative abundance and covariates.")`
 
-MW Shannon a stronger correlate of relative abundance than LS Shannon, smaller the window, the stronger the correlation. Although all Shannon measures correlate with the amount of habitat, MW Shannon (0.5km) is least correlated with this (still very high). 
+MWDA Shannon a stronger correlate of relative abundance than SDA Shannon, smaller the window, the stronger the correlation. Although all Shannon measures correlate with the amount of habitat, MWDA Shannon (0.5km) is least correlated with this (still very high). 
 
 Despite skew in the data, we have not transformed these variables because model assumptions are met without doing so (ease of interpretation). Because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 1s in data:
 
@@ -289,7 +289,7 @@ jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index10logit, -index10), .funs = f
 
 Our sample size is n = `r nrow(jay_df_t)`. 
 
-Our model contains the following variables: Shannon measure, Forest %, Urban % and Temperature. We are also including the interaction term between Temperature and each Shannon measure. We fit this model for all 4 window sizes of MW Shannon and LS Shannon. 
+Our model contains the following variables: Shannon measure, Forest %, Urban % and Temperature. We are also including the interaction term between Temperature and each Shannon measure. We fit this model for all 4 window sizes of MWDA Shannon and SDA Shannon. 
 
 ```{r model}
 jay_mod <- jay_df_t %>% 
@@ -307,7 +307,7 @@ jay_mod <- jay_df_t %>%
 mod_comp <- jay_mod %>% 
   select(window_size, mod_glance) %>% 
   unnest() %>% 
-  select(window_size, r.squared, AIC, BIC) %>% 
+  select(window_size, AIC, BIC) %>% 
   arrange(AIC)
 
 best_mod <- mod_comp %>% 
@@ -320,7 +320,7 @@ mod_comp %>%
 
 `r tabs("model", "Results of model comparison")`
 
-The best fitting model (judged by AIC, BIC and $R^2$ is that with the 100m window).
+The best fitting model (judged by AIC and BIC is that with the 100m window).
 
 # Model validation
 
@@ -337,7 +337,7 @@ plot_grid(
   ggplot(jay_df_best, aes(x = fitted, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0),
   ggplot(jay_df_best, aes(x = shannon, y = resids)) + 
-    geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("MW Shannon (100m)"),
+    geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("MWDA Shannon (100m)"),
   ggplot(jay_df_best, aes(x = habitat, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("Forest %"),
   ggplot(jay_df_best, aes(x = urban, y = resids)) + 
@@ -420,14 +420,14 @@ shannon_plot <- ggplot(pred_vals %>% filter(covariate == "shannon"),
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
   geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
   theme(legend.position = c(0.25, 0.8), legend.key.height = unit(0.1, "line")) + 
-  labs(x = "MW Shannon (100 m)", 
+  labs(x = "MWDA Shannon (100 m)", 
        y = expression(paste(italic("G. glandarius"), 
                             " abundance index (" %+-% "95% CI)")))
 
 bio1_plot <- ggplot(pred_vals %>% filter(covariate == "bio1"), 
                      aes(x = pred, y = index10logit, group = modx_label)) + 
   geom_line(aes(lty = modx_label)) + 
-  scale_linetype_manual(name = "MW Shannon (100 m)", 
+  scale_linetype_manual(name = "MWDA Shannon (100 m)", 
                         values = c("dashed", "solid", "dotdash")) + 
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
   geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
@@ -481,7 +481,7 @@ temp_slope <- paste(round(c(-1.89, 4.18) *
                     collapse = ", ")
 ```
 
-On the measurement scale, MW Shannon (1km) slope is significant in Temperature range `r shannon_slope` (all but the lowest temperatures) and Temperature slope is significant in MW Shannon (1km) range `r temp_slope` (the full range of the data)
+On the measurement scale, MWDA Shannon (1km) slope is significant in Temperature range `r shannon_slope` (all but the lowest temperatures) and Temperature slope is significant in MWDA Shannon (1km) range `r temp_slope` (the full range of the data)
 
 # Collinearity diagnostics of the final model
 
@@ -500,7 +500,7 @@ vif(jay_mod_best) %>% kable(digits = 2, col.names = c("VIF"))
 ```{r condition_mw}
 mod_diag <- colldiag(jay_mod_best) %>% lapply(as.data.frame)
 mod_diag <- do.call("cbind", mod_diag)
-names(mod_diag) <- c("CI", "Intercept", "MW Shannon", "Forest %", "Urban %", "Temp")
+names(mod_diag) <- c("CI", "Intercept", "MWDA Shannon", "Forest %", "Urban %", "Temp")
 kable(mod_diag, digits = 3)
 ```
 
