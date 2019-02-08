@@ -1,8 +1,9 @@
 ---
 title: "Moving window data aggregation"
-author: "Laura Graham"
-date: "16/11/2018"
-output: html_document
+output: 
+  html_document: 
+    self-contained: yes
+    theme: flatly
 ---
 
 ```{r setup, include=FALSE}
@@ -99,7 +100,7 @@ w1_plot <- ggplot() +
         plot.margin = unit(c(0.1, 2, 0.1, 0.1), "cm"))
 
 
-p1 <- w1_plot + ggtitle("1. Define the analysis scales and calculate the\n    measure of variability, for each predictor\n    grain cell")
+p1 <- w1_plot + ggtitle("1. Define the analysis scales\n    \n    ")
 
 p1
 ```
@@ -121,7 +122,7 @@ p2 <- ggplot() +
         axis.ticks = element_blank(),
         axis.title = element_blank(), 
         panel.border = element_blank()) + 
-  ggtitle("2. Calculate the predictor grain moving window\n    values")
+  ggtitle("2. Calculate the measure of variability,\n    within moving windows, for \n    each predictor grain cell")
 
 p2
 ```
@@ -144,7 +145,7 @@ p3 <- ggplot() +
         axis.ticks = element_blank(),
         axis.title = element_blank(), 
         panel.border = element_blank()) + 
-  ggtitle("3. Calculate the mean value of the moving window\n    value for each response grain cell")
+  ggtitle("3. Calculate the mean value of the moving window\n    value for each response grain cell\n    ")
 
 p3
 ```

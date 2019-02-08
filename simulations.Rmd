@@ -1,8 +1,9 @@
 ---
 title: "Appendix I: simulated landscapes"
-output: pdf_document
-header-includes:
-    - \usepackage{booktabs}
+output: 
+  html_document: 
+    self-contained: yes
+    theme: flatly
 ---
 
 ```{r, include = FALSE}
@@ -10,8 +11,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE, 
                       warning = FALSE, 
                       fig.path = 'figures/',
-                      dpi = 300,
-                      dev = c('pdf', 'tiff', 'png'),
+                      dev = 'png',
                       fig.width = 6.496065,
                       fig.height = 6.496065) 
 ```
@@ -24,7 +24,6 @@ In the first step, we load all of the required packages. Note that grainchanger 
 
 ```{r setup}
 # load required libraries
-library(captioner)
 library(knitr)
 library(raster)
 library(grainchanger)
@@ -36,36 +35,32 @@ library(patchwork)
 library(cowplot)
 
 # set up plotting options
-theme_set(theme_bw(base_size = 7) + theme(strip.background = element_blank(), 
-                             panel.grid.major = element_blank(),
-                             panel.grid.minor = element_blank()))
-
-# required for captioning and numbering tables and figures
-tabs <- captioner(prefix = "Table AI.")
-figs <- captioner(prefix = "Figure AI.")
+theme_set(theme_bw(base_size = 8) + 
+            theme(strip.background = element_blank(), 
+                  panel.grid.major = element_blank(),
+                  panel.grid.minor = element_blank()))
 ```
 
 # Simulated landscapes
 
-1. Simulate study landscapes each with 100 coarse grid cells (each of 65 x 65 fine grid cells) with varying combinations of spatial autocorrelation using `nlm_fbm` from the `NLMR` package [@Sciaini2018]. This is the fractal Brownian motion method where `fract_dim` controls the level of spatial autocorrelation in the landscape. A value close to zero is a rough landscape (random), and a value of one is a smooth landscape (spatially autocorrelated). We used 5 combinations of spatial autocorrelation:
+1. Simulate study landscapes each with 100 coarse grid cells (each of 65 x 65 fine grid cells) with varying combinations of spatial autocorrelation using `nlm_fbm` from the `NLMR` package. This is the fractal Brownian motion method where `fract_dim` controls the level of spatial autocorrelation in the landscape. A value close to zero is a rough landscape (random), and a value of one is a smooth landscape (spatially autocorrelated). We used 5 combinations of spatial autocorrelation:
 
-  - No spatial autocorrelation: `fractal_dim` = 0.1 for all landscapes
-  - Low, varied spatial autocorrelation: `fractal_dim` in range 0.1--0.5
-  - Varied spatial autocorrelation: `fractal_dim` in range 0.1--1
-  - High, varied spatial autocorrelation: `fractal_dim` in range 0.5--1
-  - High spatial autocorrelation: `fractal_dim` = 1 for all landscapes
+    - No spatial autocorrelation: `fractal_dim` = 0.1 for all landscapes
+    - Low, varied spatial autocorrelation: `fractal_dim` in range 0.1--0.5
+    - Varied spatial autocorrelation: `fractal_dim` in range 0.1--1
+    - High, varied spatial autocorrelation: `fractal_dim` in range 0.5--1
+    - High spatial autocorrelation: `fractal_dim` = 1 for all landscapes
   
 2. Create categorical landscapes with 5 land cover classes by using `util_classify` with random weights for each class. 
 
-3. Use `winmove` from the `grainchanger` package to calculate the moving window measures (MWM) for each coarse grid cell. For continuous landscapes, this is variance; for categorical landscapes, this is Shannon evenness. We do this for 5 window sizes:
+3. Use `winmove` from the `grainchanger` package to calculate the moving window measures (MWDA) for each coarse grid cell. For continuous landscapes, this is variance; for categorical landscapes, this is Shannon evenness. We do this for 4 neighbourhood sizes: 500, 1000, 1500, 3500
 
-  - 3 x 3 pixels (0.2% of coarse grid cell)
-  - 9 x 9 pixels (1.9% of coarse grid cell)
-  - 15 x 15 pixels (5.3% of coarse grid cell)
-  - 35 x 35 pixels (29% of coarse grid cell)
-  - 55 x 55 pixels (71.6% of coarse grid cell)
+    - 500 m (1 % of coarse grid cell)
+    - 1 km (4 % of coarse grid cell)
+    - 1.5 km (9% of coarse grid cell)
+    - 3.5 km (49% of coarse grid cell)
   
-4. Calculate the corresponding measures for each coarse grid cell using standard (non-moving window) methods (LSM).
+4. Calculate the corresponding measures for each coarse grid cell using standard (non-moving window) methods (DDA).
 
 We created 100 replicate study landscapes using the Iridis HPC at University of Southampton. The below code is for one replicate:
 
@@ -84,31 +79,88 @@ plan(multiprocess)
 
 strt <- Sys.time()
 res <- bind_rows(
-  tibble(sa_scenario = "No spatial autocorrelation", sa_values = rep(0.1, 100)),
-  tibble(sa_scenario = "Low, varied spatial autocorrelation", sa_values = seq(0.1, 0.5, length.out = 100)),
-  tibble(sa_scenario = "Varied spatial autocorrelation", sa_values = seq(0.1, 1, length.out = 100)),
-  tibble(sa_scenario = "High, varied spatial autocorrelation", sa_values = seq(0.5, 1, length.out = 100)),
-  tibble(sa_scenario = "High spatial autocorrelation", sa_values = rep(1, 100))
+  tibble(sa_scenario = "No SA", sa_values = rep(0.1, 100)),
+  tibble(sa_scenario = "Low, varied SA", sa_values = seq(0.1, 0.5, length.out = 100)),
+  tibble(sa_scenario = "Varied SA", sa_values = seq(0.1, 1, length.out = 100)),
+  tibble(sa_scenario = "High, varied SA", sa_values = seq(0.5, 1, length.out = 100)),
+  tibble(sa_scenario = "High SA", sa_values = rep(1, 100))
 ) %>% 
   # create the continuous and categorical landscapes
-  mutate(cont_ls = future_map(sa_values, function(x) nlm_fbm(ncol = 400, nrow = 400, resolution = 25, fract_dim = x)),
-         # the categorical map has a random proportion between landscapes for each landscape
-         cat_wt = future_map(sa_values, function(x) diff(c(0, sort(runif(4)), 1))),
-         cat_ls = future_map2(cont_ls, cat_wt, function(x, wt) util_classify(x, weighting = wt)),
-         # calculate LSM
-         cont_lsm = future_map_dbl(cont_ls, function(x) x %>% raster::values() %>% var),
-         cat_lsm = future_map_dbl(cat_ls, function(x) diversity(x, lc_class = 0:4))) %>% 
+  mutate(
+    cont_ls = future_map(sa_values, function(x) {
+      nlm_fbm(ncol = 400, 
+              nrow = 400, 
+              resolution = 25, 
+              fract_dim = x)
+    }),
+    # the categorical map has a random proportion between landscapes for each landscape
+    cat_wt = future_map(sa_values, function(x) {
+      diff(c(0, sort(runif(4)), 1))
+    }),
+    cat_ls = future_map2(cont_ls, cat_wt, function(x, wt) {
+      util_classify(x, weighting = wt)
+    }),
+    # calculate DDA
+    cont_lsm = future_map_dbl(cont_ls, function(x) {
+      x %>% raster::values() %>% var
+    }),
+    cat_lsm = future_map_dbl(cat_ls, function(x) {
+      diversity(x, lc_class = 0:4)
+    })) %>% 
   crossing(window = c(500, 1000, 1500, 3500)) %>% 
   mutate(cont_ls_pad = future_map2(cont_ls, window, create_torus),
          cat_ls_pad = future_map2(cat_ls, window, create_torus),
-         # calculate MWM
-         cont_mwm = future_map2_dbl(cont_ls_pad, window, function(ls, w) winmove(ls, d = w, type = "rectangle", fun = "var") %>% trim %>% raster::values() %>% mean),
-         cat_mwm = future_map2_dbl(cat_ls_pad, window, function(ls, w) winmove(ls, d = w, type = "rectangle", fun = "shei", lc_class = 0:4) %>% trim %>% raster::values() %>% mean)
-  ) %>% select(-cont_ls, -cat_ls, -cont_ls_pad, -cat_ls_pad)
+         # calculate MWDA
+         cont_mwm = future_map2_dbl(cont_ls_pad, window, function(ls, w) {
+           winmove(ls, 
+                   d = w, 
+                   type = "rectangle", 
+                   fun = "var") %>% 
+             trim %>% 
+             raster::values() %>% 
+             mean
+         }),
+         cat_mwm = future_map2_dbl(cat_ls_pad, window, function(ls, w) {
+           winmove(ls, 
+                   d = w, 
+                   type = "rectangle", 
+                   fun = "shei", 
+                   lc_class = 0:4) %>% 
+             trim %>% 
+             raster::values() %>% 
+             mean
+         })) %>% 
+  select(-cont_ls, -cat_ls, -cont_ls_pad, -cat_ls_pad)
 
 runtime = difftime(Sys.time(),  strt)
 out = list(res = res, runtime = runtime)
 save(out, file = tempfile(tmpdir = ".", fileext = ".Rda")) 
+```
+
+We load all the simulated data: 
+
+```{r load_sims}
+load("results/sims_all_replicates.Rda")
+
+win_label <- round(((2*df$window + 1)^2/10000^2)*100, 1) %>% 
+  unique() %>% 
+  paste0("%")
+
+df <- df %>% 
+  mutate(sa_scenario = factor(sa_scenario, 
+                              levels = c("No SA", 
+                                         "Low, varied SA", 
+                                         "Varied SA",
+                                         "High, varied SA",
+                                         "High SA")),
+         window = factor(window, 
+                         labels = win_label),
+         rep = ceiling((rep %>% 
+                          as.factor %>% 
+                          as.numeric)/10)) %>% 
+  group_by(rep, sa_scenario, window) %>% 
+  mutate(ls_id = 1:n()) %>% 
+  ungroup()
 ```
 
 We use the simulated landscapes to explore two questions:
@@ -119,24 +171,7 @@ We use the simulated landscapes to explore two questions:
 
 # Question 1: Correlation between MW and LS
 
-Here we calculate the Spearman's rank correlation between LSM and MWM for each replicate at each level of spatial autocorrelation and moving window size. The plot below shows the mean and standard deviation of these correlations (across 100 replicates). 
-
-```{r load_sims}
-load("results/sims_all_replicates.Rda")
-
-df <- df %>% 
-  mutate(sa_scenario = factor(sa_scenario, 
-                              levels = c("No spatial autocorrelation", 
-                                         "Low, varied spatial autocorrelation", 
-                                         "Varied spatial autocorrelation",
-                                         "High, varied spatial autocorrelation",
-                                         "High spatial autocorrelation")),
-         window = factor(window, labels = unique(paste0(round(((2*window + 1)^2/10000^2)*100, 1), "%"))),
-         rep = ceiling((rep %>% as.factor %>% as.numeric)/10)) %>% 
-  group_by(rep, sa_scenario, window) %>% 
-  mutate(ls_id = 1:n()) %>% 
-  ungroup()
-```
+Here we calculate the Spearman's rank correlation between MWDA and DDA for each replicate at each level of spatial autocorrelation and moving window size. The plot below shows the mean and standard deviation of these correlations (across 100 replicates). 
 
 ```{r correlations}
 corrs <- df %>% 
@@ -162,14 +197,18 @@ corrs <- df %>%
 p1 <- ggplot(corrs %>% filter(measure_type == "mean"), 
        aes(x = window, y = sa_scenario, fill = value)) + 
   geom_tile() + 
-  scale_fill_distiller("MWDA vs SDA cor\n(mean)", palette = "BrBG", limits = c(-1, 1), direction = 1) + 
+  scale_fill_distiller("MWDA vs DDA cor\n(mean)", 
+                       palette = "BrBG", 
+                       limits = c(-1, 1), 
+                       direction = 1) + 
   labs(x = "Window % of landscape", y = "") + 
   facet_wrap(~ls_type)
 
 p2 <- ggplot(corrs %>% filter(measure_type == "sd"), 
              aes(x = window, y = sa_scenario, fill = value)) + 
   geom_tile() + 
-  scale_fill_distiller("MWDA vs SDA cor\n(SD)", palette = "BrBG") + 
+  scale_fill_distiller("MWDA vs DDA cor\n(SD)", 
+                       palette = "BrBG") + 
   labs(x = "Window % of landscape", y = "") + 
   facet_wrap(~ls_type)
 
@@ -177,47 +216,56 @@ p2 <- ggplot(corrs %>% filter(measure_type == "sd"),
 p1 / p2
 ```
 
-`r figs("correlations", "Mean correlations between measures calcualted using the moving window (MWDA) and standard (SDA) approaches to data aggregation for continuous and categorical landscapes under 5 different landscape types and 4 different scales-of-effect (top row). Standard deviations of these correlations (bottom row)")`
+**Figure AI.1** Mean correlations between measures calcualted using the moving window (MWDA) and direct (DDA) approaches to data aggregation for continuous and categorical landscapes under 5 different landscape types and 4 different scales-of-effect (top row). Standard deviations of these correlations (bottom row).
 
-- Higher correlation between MWM and LSM in continuous landscapes
+
+- Higher correlation between MWDA and DDA in continuous landscapes
 - We even get negative correlation in categorical landscapes for small moving window and variation in spatial autocorrelation. 
 - MW and LS are highly correlated for the two largest window sizes. 
 - There is more variability between the amount of correlation in replicates for continuous than categorical landscapes. 
 
-Why do we get negative correlations in some cases? The below plots show each spatial autocorrelation scenario and window size combination which results in a negative correlation between MWM and LSM measures. In the first plot, points are coloured by the spatial autocorrelation value used to generate the landscape. In the second, they are coloured by the replicate ID.    
+Why do we get negative correlations in some cases? The below plots show each spatial autocorrelation scenario and window size combination which results in a negative correlation between MWDA and DDA measures. In the first plot, points are coloured by the spatial autocorrelation value used to generate the landscape. In the second, they are coloured by the replicate ID.    
 
 ```{r neg_corr}
 neg_corr <- corrs %>% filter(value < 0) %>% 
   inner_join(df) %>% 
-  filter(rep %in% 1:100)
+  filter(rep %in% 1:10)
 
-neg_p1 <- ggplot(neg_corr, aes(x = cont_lsm, y = cont_mwm, colour = sa_values, group = sa_values)) +
+neg_p1 <- ggplot(neg_corr, 
+                 aes(x = cont_lsm, 
+                     y = cont_mwm, 
+                     colour = sa_values, 
+                     group = sa_values)) +
   geom_point() + 
   scale_fill_continuous(name = "Spatial Autocorrelation") + 
   facet_wrap(~ sa_scenario + window) + 
-  labs(x = "SDA", y = "MWDA")
+  labs(x = "DDA", y = "MWDA")
   
-neg_p2 <- ggplot(neg_corr, aes(x = cont_lsm, y = cont_mwm, colour = rep, group = rep)) +
+neg_p2 <- ggplot(neg_corr, 
+                 aes(x = cont_lsm, 
+                     y = cont_mwm, 
+                     colour = rep, 
+                     group = rep)) +
   geom_point() + 
   scale_fill_continuous(name = "Replicate") + 
   facet_wrap(~ sa_scenario + window) + 
-  labs(x = "SDA", y = "MWDA")
+  labs(x = "DDA", y = "MWDA")
   
 neg_p1 / neg_p2 + plot_annotation(tag_levels = "a", tag_suffix = ")")
 
 ```
 
-`r figs("neg_corr", "MWDA value plotted against SDA value for those scenarios resulting in negative correlations. In (a) colours represent the value of spatial autocorrelation in the individual cell, from 0 (low spatial autocorrelation) to 1 (high spatial autocorrelation). In (b) colours represent the replicate from which the data are shown.")`
+**Figure AI.2** MWDA value plotted against DDA value for those scenarios resulting in negative correlations. In (a) colours represent the value of spatial autocorrelation in the individual cell, from 0 (low spatial autocorrelation) to 1 (high spatial autocorrelation). In (b) colours represent the replicate from which the data are shown.
 
-In all cases, low values of spatial autocorrelation result in high MWM and low LSM variance; high values of spatial autocorrelation result in low MWM and high LSM. This is what is driving the negative correlation. Within spatial autocorrelation values, we still see positive correlation between replicates, these correlations are greater for lower values of spatial autocorrelation. Within replicate, this manifests as negative correlation (leading to an overall negative correlation when taken as the mean of all replicates). 
+In all cases, low values of spatial autocorrelation result in high MWDA and low DDA variance; high values of spatial autocorrelation result in low MWDA and high DDA This is what is driving the negative correlation. Within spatial autocorrelation values, we still see positive correlation between replicates, these correlations are greater for lower values of spatial autocorrelation. Within replicate, this manifests as negative correlation (leading to an overall negative correlation when taken as the mean of all replicates). 
 
 # Question 2: Identifying the scale-of-effect
 
 In order to examine whether we can correctly identify the scale of effect when comparing several correlated measures calculated using different window sizes, we use our MW measures to generate an ecological response variable for every window size in each coarse grid cell in each replicate landscape and all spatial autocorrelation scenarios. We calculate this response variable as $y_w = MW_w + \epsilon$ where $y_w$ is the response variable for a given window size $w$, $MW_w$ is the moving window calculated measure for window size $w$ and $\epsilon ~ N(0, \sigma)$. We use three levels of $\epsilon$: 
 
-- low $\epsilon$: first percentile of the MWM measure value within each spatial autocorrelation and window combination. This represents data with minimal noise. 
-- moderate $\epsilon$: tenth percentile of the MWM measure value within each spatial autocorrelation and window combination. This represents data with a moderate amount of noise. 
-- high $\epsilon$: median of the MWM measure value within each spatial autocorrelation and window combination. This represents data with a large amount of noise. 
+- low $\epsilon$: first percentile of the MWDA measure value within each spatial autocorrelation and window combination. This represents data with minimal noise. 
+- moderate $\epsilon$: tenth percentile of the MWDA measure value within each spatial autocorrelation and window combination. This represents data with a moderate amount of noise. 
+- high $\epsilon$: median of the MWDA measure value within each spatial autocorrelation and window combination. This represents data with a large amount of noise. 
 
 For each $y_w$ we fit a univariate linear model with each $MW_w$ as the covariate and use $R^2$ and AIC to examine whether the correct window size (and thus, scale of effect) is identified. 
 
@@ -225,10 +273,12 @@ For the models fit for each of the $y_w$ and $MW_w$ combinations, we calculate t
 
 ```{r scale_check, fig.width = 6, fig.height = 6}
 window_y = unique(df$window)
+
 noise_level = tibble(noise_level = c("Low noise", "Moderate noise", "High noise"), 
                      noise_value = c(0.1, 0.25, 0.5))
 
-df_narrow <- df %>% select(rep, ls_id, sa_scenario, window, cont_mwm, cat_mwm) %>% 
+df_narrow <- df %>% 
+  select(rep, ls_id, sa_scenario, window, cont_mwm, cat_mwm) %>% 
   gather(measure, value, -rep, -ls_id, -sa_scenario, -window)
 
 y_vals <- df_narrow %>% 
@@ -240,7 +290,8 @@ y_vals <- df_narrow %>%
   ungroup() %>% 
   select(rep, sa_scenario, ls_id, window_y = window, noise_level, measure, y)
 
-mod_df <- df_narrow %>% rename(window_x = window) %>% 
+mod_df <- df_narrow %>% 
+  rename(window_x = window) %>% 
   crossing(window_y) %>% 
   inner_join(y_vals) %>% 
   group_by(rep, sa_scenario, noise_level, measure, window_x, window_y) %>% 
@@ -276,23 +327,41 @@ ggplot(correct_df %>% filter(fit_measure == "AIC"),
   facet_grid(noise_level ~ ls_type)
 ```
 
-`r figs("scale_check", "Percentage of replicates where the correct scale-of-effect was identified across the five landscape scenarios, four scales-of-effect and three noise levels.")`
+**Figure AI.3** (a) correlation plot from above; (b) Percentage of replicates where the correct scale-of-effect was identified across the five landscape scenarios, four scales-of-effect and three noise levels.
+
+```{r scale_check_plot_out, echo = FALSE}
+scale_check <- ggplot(correct_df %>% filter(fit_measure == "AIC"), 
+       aes(x = window_y, y = sa_scenario, fill = pass)) + 
+  geom_tile() + 
+  scale_fill_viridis_c("% correct") + 
+  labs(x = "Window % of landscape", y = "") + 
+  facet_grid(noise_level ~ ls_type)
+
+out <- p1 / scale_check + 
+  plot_layout(heights = c(1, 3)) + 
+  plot_annotation(tag_levels = "a", tag_suffix = ")")
+
+ggsave("figures/F3_sim_figure.png", out, width = 6.496065, height = 6.496065, units = "in", dpi = 300)
+ggsave("figures/F3_sim_figure.tiff", out, width = 6.496065, height = 6.496065, units = "in", dpi = 300)
+```
 
 ```{r scale_check_pass}
 correct_df %>% filter(fit_measure == "AIC") %>% 
   group_by(ls_type, noise_level) %>% 
-  summarise_at(.vars = "pass", .funs = c("mean", "min", "max"))
+  summarise_at(.vars = "pass", .funs = c("mean", "min", "max")) %>% 
+  kable()
 ```
 
-`r tabs("scale_check_tab", "Mean, minimum and maximum percentage of replicates where the correct scale-of-effect was identified across the five landscape scenarios, four scales-of-effect and three noise levels.")`
+**Table AI.1** Mean, minimum and maximum percentage of replicates where the correct scale-of-effect was identified across the five landscape scenarios, four scales-of-effect and three noise levels.
 
 ```{r scale_check_min_pass}
 correct_df %>% filter(fit_measure == "AIC") %>% 
   group_by(ls_type, noise_level) %>% 
-  slice(which.min(pass))
+  slice(which.min(pass)) %>% 
+  kable()
 ```
 
-`r tabs("scale_check_min", "Minimum number of replicates where correct scale-of-effect was identified across the five landscape scenarios and three noise levels.")`
+**Table AI.2** Minimum number of replicates where correct scale-of-effect was identified across the five landscape scenarios and three noise levels.
 
 - Whether judged by $R^2$ or AIC, we are able to identify the correct scale of effect in low noise datasets most of the time
 - In moderate and high noise datasets, we are best able to identify the correct scale of effect when it is small or large, and the data is continuous. 
@@ -317,19 +386,20 @@ ggplot(r2_df, aes(x = window_x, y = sa_scenario, fill = mean_r2)) +
   facet_grid(noise_level ~ ls_type)
 ```
 
-`r figs("r2_plot", "Mean $R^2$ values from the models for the correct scale-of-effect across the five landscape scenarios, four window sizes and three noise levels")`
+**Figure AI.4** Mean $R^2$ values from the models for the correct scale-of-effect across the five landscape scenarios, four window sizes and three noise levels.
 
 ```{r r2_tab}
 r2_df %>% group_by(ls_type, noise_level) %>% 
-  summarise_at(.vars = "mean_r2", .funs = c("min", "mean", "max"))
+  summarise_at(.vars = "mean_r2", .funs = c("min", "mean", "max")) %>% 
+  kable()
 ```
 
-`r figs("r2_plot", "Mean, minimum and maximum $R^2$ values from the models for the correct scale-of-effect across the five landscape scenarios, four window sizes and three noise levels")`
+**Table AI.3** Mean, minimum and maximum $R^2$ values from the models for the correct scale-of-effect across the five landscape scenarios, four window sizes and three noise levels.
 
 # Session Info
 
 ```{r session_info}
 session <- devtools::session_info()
 session[[1]]
-session[[2]] %>% kable
+session[[2]] %>% select(package, loadedversion, source) %>% kable
 ```
