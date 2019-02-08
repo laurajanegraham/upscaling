@@ -1,11 +1,9 @@
 ---
 title: "Appendix II: *Garrulus glandarius* case study"
 output: 
-  pdf_document:
-    toc: true
-    number_sections: true
-header-includes:
-    - \usepackage{booktabs}
+  html_document: 
+    self-contained: yes
+    theme: flatly
 ---
 
 ```{r, include=FALSE}
@@ -13,9 +11,8 @@ knitr::opts_chunk$set(echo = TRUE,
                       message = FALSE, 
                       warning = FALSE, 
                       fig.path = 'figures/',
-                      dpi = 300,
-                      dev = c('pdf', 'tiff', 'png'),
-                      fig.width = 6.496065) # width of full page figure for Ecology Letters
+                      dev = 'png',
+                      fig.width = 6.496065) 
 ```
 
 # Required packages
@@ -27,26 +24,20 @@ In the first step, we load all of the required packages. Note that grainchanger 
 Other options in this section set the order and labels for the variables for plotting and tables. 
 
 ```{r setup}
-library(captioner)
 library(jtools)
-library(car)
 library(perturb)
+library(car)
 library(grainchanger)
 library(raster)
-library(rgdal)
-library(rgeos)
 library(sf)
 library(knitr)
-library(GGally)
 library(e1071) # optimising transformations (skewness function)
 library(broom)
-library(MuMIn)
 library(stringr)
 library(DHARMa)
-library(cowplot)
 library(tidyverse)
-
-source("R/ca_glm.R")
+library(corrr)
+library(cowplot)
 
 # define logit and inv logit functions
 logit <- function(value, eps) {
@@ -59,29 +50,64 @@ inv.logit <- function(value, eps) {
 }
 
 # set up plotting options
-theme_set(theme_bw(base_size = 7) + theme(strip.background = element_blank(), 
+theme_set(theme_bw(base_size = 8) + theme(strip.background = element_blank(), 
                              panel.grid.major = element_blank(),
                              panel.grid.minor = element_blank()))
 
 # set up some options
 # for exploratory plotting
-varorder <- c("index10", "winshannon", "lsshannon", "habitat", "urban", "bio1")
+varorder <- c("index10", 
+              "winshannon50", 
+              "winshannon100", 
+              "winshannon500", 
+              "winshannon1000", 
+              "winshannon1500", 
+              "winshannon3500", 
+              "lsshannon", 
+              "habitat", 
+              "urban", 
+              "bio1")
 
-varlabel <- c("Abundance (2010 Atlas)", "MW Shannon\n(1km)", "LS Shannon", 
-              "Forest %", "Urban %", "Temperature")
+varlabel <- c("Abundance (2010 Atlas)", 
+              "MWDA Shannon\n(50 m)", 
+              "MWDA Shannon\n(100 m)", 
+              "MWDA Shannon\n(500 m)", 
+              "MWDA Shannon\n(1 km)", 
+              "MWDA Shannon\n(1.5 km)", 
+              "MWDA Shannon\n(3.5 km)", 
+              "DDA Shannon", 
+              "Forest %", 
+              "Urban %", 
+              "Temperature")
 
 # for initial tables from models
-coefforder <- c("(Intercept)", "winshannon", "lsshannon", "habitat", 
-               "winshannon:bio1", "lsshannon:bio1",
-               "urban", "bio1")
+coefforder <- c("(Intercept)", 
+                "winshannon50", 
+                "winshannon100", 
+                "winshannon500", 
+                "winshannon1000", 
+                "winshannon1500",
+                "winshannon3500", 
+                "lsshannon", 
+                "habitat", 
+                "winshannon:bio1",
+                "lsshannon:bio1",
+                "urban", 
+                "bio1")
 
-coefflabel <- c("Intercept", "MW Shannon (1km)", "LS Shannon", "Forest %", 
-                    "MW Shannon : Temperature", "LS Shannon : Temperature", 
-                    "Urban %", "Temperature")
-
-# required for captioning and numbering tables and figures
-tabs <- captioner(prefix = "Table AII.")
-figs <- captioner(prefix = "Figure AII.")
+coefflabel <- c("Intercept", 
+                "MWDA Shannon\n(50 m)", 
+                "MWDA Shannon\n(100 m)", 
+                "MWDA Shannon\n(500 m)", 
+                "MWDA Shannon\n(1 km)", 
+                "MWDA Shannon\n(1.5 km)",
+                "MWDA Shannon\n(3.5 km)", 
+                "DDA Shannon", 
+                "Forest %",
+                "MWDA Shannon : Temperature", 
+                "DDA Shannon : Temperature", 
+                "Urban %", 
+                "Temperature")
 ```
 
 # Data
@@ -105,41 +131,89 @@ jay_sp <- read_sf("~/DATA/ADMINISTRATIVE/bng/10km_grid_region.shp") %>%
 
 The data for which we want to use the upscaling approach on is Land Cover Map 2007, which is the closest match to the 2010 relative abundance index for jays. We will use the moving window to upscale diversity of the two used habitats: Broadleaf and Coniferous forest (LCM codes 1, 2). Eurasian jays use a combination of these habitats: broadleaf for foraging, coniferous for nesting. We will calculate Shannon Diversity on just these two habitats to create a measure of the landscape structure used by jays. We will calculate Shannon diversity using the moving window approach at the 1km scale and without the moving window at the 10km scale. As covariates, we will calculate forest (habitat) cover percentage, urban land cover percentage and from Worldclim mean annual temperature (bio1).
 
-```{r envdata, eval = FALSE}
+```{r envdata, eval = FALSE, cache = TRUE}
 lcm <- raster("~/DATA/LULC/lcm2007/lcm2007_25m_gb.tif")
 forest <- c(1, 2) # these are the two forest classes
 urban <- c(22, 23)
 
-bng <- as(jay_sp, 'Spatial')
+# allow for multicore processing
+plan(multiprocess)
 
 # shannon via moving window
 strt <- Sys.time()
-bng$winshannon <- winmoveR::winmove_upscale(grid = bng, dat = lcm, radius = 1000, 
-                                            type = "rectangle", fn = "diversity", 
-                                            lc_class = forest)
-run_time <- difftime(Sys.time(), strt, units = "mins")
+jay_sp$winshannon50 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 50, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime50 <- difftime(Sys.time(), strt, units = "mins")
 
-save(run_time, file = "results/jays_runtime.Rda")
+# shannon via moving window
+strt <- Sys.time()
+jay_sp$winshannon100 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 100, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime100 <- difftime(Sys.time(), strt, units = "mins")
+
+strt <- Sys.time()
+jay_sp$winshannon500 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 500, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime500 <- difftime(Sys.time(), strt, units = "mins")
+  
+strt <- Sys.time()
+jay_sp$winshannon1000 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 1000, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime1000 <- difftime(Sys.time(), strt, units = "mins")
+
+strt <- Sys.time()
+jay_sp$winshannon1500 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 1500, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime1500 <- difftime(Sys.time(), strt, units = "mins")
+
+strt <- Sys.time()
+jay_sp$winshannon3500 <- grainchanger::winmove_agg(g = jay_sp, dat = lcm, d = 3500, 
+                                              type = "rectangle", fun = "shei", 
+                                              lc_class = forest)
+runtime3500 <- difftime(Sys.time(), strt, units = "mins")
+
+runtime <- tibble(d = c(50, 100, 500, 1000, 1500, 3500), 
+                  runtime = c(runtime50, 
+                              runtime100, 
+                              runtime500, 
+                              runtime1000, 
+                              runtime1500, 
+                              runtime3500))  
+save(runtime, file = "results/jays_runtime.Rda")
 
 # shannon without moving window
-bng$lsshannon <- nomove_upscale(grid = bng, dat = lcm, 
-                                fn = "diversity", lc_class = forest)
+jay_sp$lsshannon <- grainchanger::nomove_agg(g = jay_sp, dat = lcm, 
+                                fun = "diversity", lc_class = forest)
 
 # other measures from lcm
-bng$habitat <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", lc_class = forest)
-bng$urban <- nomove_upscale(grid = bng, dat = lcm, fn = "prop", lc_class = urban)
+jay_sp$habitat <- grainchanger::nomove_agg(g = jay_sp, 
+                                           dat = lcm, 
+                                           fun = "prop", 
+                                           lc_class = forest)
+jay_sp$urban <- grainchanger::nomove_agg(g = jay_sp, 
+                                         dat = lcm, 
+                                         fun = "prop", 
+                                         lc_class = urban)
 
 # Bioclimatic variables from worldclim
 wc_bio <- getData('worldclim', var = 'bio', path = '~/DATA/CLIMATE/worldclim/', res=5)
-bng_pts <- spTransform(gCentroid(bng, byid=TRUE), crs(wc_bio))
-jay_sp <- st_as_sf(bng) %>% bind_cols(raster::extract(wc_bio, bng_pts) %>% as.tibble)
+jay_pts <- st_centroid(jay_sp) %>% st_transform(proj4string(wc_bio))
+jay_sp <- jay_sp %>% bind_cols(raster::extract(wc_bio, jay_pts) %>% as.tibble)
 
 save(jay_sp, file="results/jays_covariates.Rda")
 ```
 
-`r load("results/jays_runtime.Rda")`
+Running times to aggregate 25m resolution land cover data to 10km for the 4 different window sizes:
 
-Upscaling 25m resolution land-cover data for Europe to 10km degrees resolution using a 1km radius window took:  `r round(run_time, 2)` minutes. 
+```{r runtime}
+load("results/jays_runtime.Rda")
+runtime %>% kable(col.names = c("Window size", "Runtime"), digits = 0)
+```
 
 ## Exploration and transformation
 
@@ -147,22 +221,35 @@ We have removed cells with 0 abundance because we are only really interested in 
 
 ```{r reload_data}
 load("results/jays_covariates.Rda")
-jay_sp <- jay_sp %>% filter(index10 != 0) %>% na.omit
-jay_df <- jay_sp %>% as.tibble %>% select(varorder) %>% mutate(bio1 = bio1/10)
+jay_sp <- jay_sp %>% 
+  filter(index10 != 0) %>% 
+  na.omit %>% 
+  select(varorder) %>% 
+  mutate(bio1 = bio1/10)
 # /10 is due to way that worldclim stores the temperature data
+
+jay_df <- jay_sp %>% 
+  as_tibble %>% 
+  select(-geometry)
 ```
 
 What do the variables look like spatially?
 
-```{r F3_jay_data_figure}
-jay_response <- jay_sp %>% 
+```{r jay_data_figure}
+gb_outline <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp") %>% 
+  filter(NAME_1 != "Northern Ireland") %>% 
+  st_crop(xmin = -8, ymin = 49.865417, xmax = 1.764168, ymax = 61.527084)
+
+jay_narrow <- jay_sp %>% 
   mutate_at(.vars = vars(-index10, -geometry), .funs = funs(scale)) %>% 
   gather(variable, value, -geometry) %>% 
-  mutate(facet = "Relative abundance index")
+  mutate(facet = "",
+         fvariable = factor(variable, levels = varorder, labels = varlabel))
 
-jay_plot <- ggplot(jay_response %>% filter(variable == "index10")) + 
+jay_plot <- ggplot(jay_narrow %>% filter(variable == "index10")) + 
+  geom_sf(data = gb_outline, fill = "grey", colour = NA) + 
   geom_sf(aes(fill = value), colour = NA) +
-  coord_sf(crs = st_crs(jay_response), datum = NA) + 
+  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
   scale_fill_viridis_c(name = "", option = "magma") + 
   facet_wrap(~facet) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), 
@@ -171,44 +258,64 @@ jay_plot <- ggplot(jay_response %>% filter(variable == "index10")) +
         legend.key.height=unit(6,"points"), legend.key.width = unit(1.5, "line"),
         panel.border = element_blank())
 
-jay_covs <- jay_response %>% 
-  filter(variable %in% varorder[-1]) %>% 
-  mutate(variable = factor(variable, levels = varorder, labels = varlabel))
-
-cov_plot <- ggplot(jay_covs) + 
+cov_plot <- ggplot(jay_narrow %>% 
+                     filter(variable %in% c("winshannon100", 
+                                            "habitat", 
+                                            "urban", 
+                                            "bio1"))) + 
+  geom_sf(data = gb_outline, fill = "grey", colour = NA) + 
   geom_sf(aes(fill = value), colour = NA) +
-  coord_sf(crs = st_crs(jay_covs), datum = NA) + 
-  scale_fill_viridis_c(name = "") + facet_wrap(~variable) + 
+  coord_sf(crs = st_crs(jay_narrow), datum = NA) + 
+  scale_fill_viridis_c(name = "") + facet_wrap(~fvariable) + 
   theme(axis.text = element_blank(), axis.line = element_blank(), 
         axis.ticks = element_blank(),
         legend.position = "bottom", legend.title.align = 0.5,
         legend.key.height=unit(6,"points"), legend.key.width = unit(2, "line"),
         panel.border = element_blank())
 
-plot_grid(jay_plot, cov_plot, labels = c("a)", "b)"), 
-                          label_size = 7, rel_widths = c(1, 1.5))
+plot_grid(jay_plot, 
+          cov_plot, 
+          labels = c("a)", "b)"), 
+          label_size = 7, 
+          rel_widths = c(1, 1.5))
 ```
 
-`r figs("spatial_plot", "A case study of the effect of habitat structure on Garrulus glandarius abundance. Study area showing the spatial distribution of (a) relative abundance index for G. glandarius and (b) scaled covariates (mean = 0; standard deviation = 1).")`
+**Figure AII.1** A case study of the effect of habitat structure on Garrulus glandarius abundance. Study area showing the spatial distribution of (a) relative abundance index for G. glandarius and (b) scaled covariates (mean = 0; standard deviation = 1).
+
+```{r jay_data_figure_out, echo = FALSE}
+out <- plot_grid(jay_plot, 
+          cov_plot, 
+          labels = c("a)", "b)"), 
+          label_size = 7, 
+          rel_widths = c(1, 1.5))
+
+ggsave("figures/F2_jay_data.png", out, width = 6.496065, units = "in", dpi = 300)
+ggsave("figures/F2_jay_data.tiff", out, width = 6.496065, units = "in", dpi = 300)
+```
 
 How are the variables distributed and where are the correlations?
 
-```{r pairs}
-ggpairs(
-  jay_df %>% select(varorder), 
-  upper = list(
-    continuous = wrap('cor', method = "spearman")
-  ),
-  lower = list(
-    continuous = wrap('points', alpha = 0.3, size =0.1)
-  ),
-  columnLabels = varlabel
-)
+```{r distrib}
+ggplot(jay_narrow, aes(x = value)) + 
+      geom_histogram() + 
+      facet_wrap(~ variable, scales = "free")
 ```
 
-`r figs("pairs", "Pairs plot of *Garrulus glandarius* relative abundance and covariates. Correlations shown are Spearman's $\\rho$.")`
+**Figure AII.2** Distributions of *Garrulus glandarius* relative abundance and covariates.
 
-MW Shannon a stronger correlate of relative abundance than LS Shannon. Although both Shannon measures correlate with the amount of habitat, MW Shannon is least correlated with this (still very high). Right skew to habitat percentage, urban percentage and precipitation, and left skew to temperature. 
+Right skew to habitat percentage, urban percentage and precipitation, and left skew to temperature. 
+
+```{r corrs, width = 12}
+corrs <- jay_df %>% 
+  correlate(method = "spearman", quiet = TRUE) %>% 
+  shave
+
+rplot(corrs, shape = 15, print_cor = TRUE) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+**Figure AII.3** Pairwise Spearman correlations between *Garrulus glandarius* relative abundance and covariates.
+
+MWDA Shannon a stronger correlate of relative abundance than DDA Shannon, smaller the window, the stronger the correlation. Although all Shannon measures correlate with the amount of habitat, MWDA Shannon (50m & 100m) is least correlated with this (still very high). 
 
 Despite skew in the data, we have not transformed these variables because model assumptions are met without doing so (ease of interpretation). Because the abundance index is proportional, we transform this using a logit transform with the smallest non-zero value added to the numerator and denominator due to presence of 1s in data:
 
@@ -236,275 +343,127 @@ We scaled the data (mean = 0, SD = 1) to make the covariates comparable due to t
 
 ```{r scale_data}
 scale_this <- function(x) as.vector(scale(x))
-jay_df_t <- mutate_at(jay_df_t, .vars = vars(-index10logit, -index10), .funs = funs(scale_this))
+
+jay_df_t <- mutate_at(jay_df_t, 
+                      .vars = vars(-index10logit, -index10), 
+                      .funs = funs(scale_this))
 ```
 
 # Statistical model
 
 Our sample size is n = `r nrow(jay_df_t)`. 
 
-Our model contains the following variables: MW Shannon, LS Shannon, Forest %, Urban % and Temperature. We are also including the interaction term between Temperature and MW & LS Shannon. 
+Our model contains the following variables: Shannon measure, Forest %, Urban % and Temperature. We are also including the interaction term between Temperature and each Shannon measure. We fit this model for all 4 window sizes of MWDA Shannon and SDA Shannon. 
 
-```{r global_model}
-mod_global <- lm(index10logit ~ winshannon + lsshannon + habitat + urban + bio1 +
-                   bio1:lsshannon + bio1:winshannon, 
-                 data = jay_df_t, na.action = na.fail)
+```{r model}
+jay_mod <- jay_df_t %>% 
+  gather(window_size, shannon, -index10, -index10logit, -habitat, -urban, -bio1) %>% 
+  group_by(window_size) %>% 
+  nest() %>% 
+  mutate(mod = map(data, function(x) lm(index10logit ~ shannon + habitat + urban + 
+                                          bio1 + bio1:shannon, 
+                                        data = x, na.action = na.fail)),
+         mod_res = map(mod, function(x) bind_cols(tidy(x), confint_tidy(x))),
+         mod_glance = map(mod, glance),
+         mod_check = map(mod, function(x) tibble(resids = x$residuals, fitted = x$fitted)))
 
-res_global <- mod_global %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_global %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, labels = coefflabel)) %>%
-  arrange(fvariable) 
+mod_comp <- jay_mod %>% 
+  select(window_size, mod_glance) %>% 
+  unnest() %>% 
+  select(window_size, AIC, BIC) %>% 
+  arrange(AIC)
 
-# check this calculation of R2
-globalr2 = glance(mod_global)$r.square
-
-res_global %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+best_mod <- mod_comp %>% 
+  slice(1) %>% 
+  pull(window_size)
+  
+mod_comp %>% 
+  kable(digits = 3)
 ```
 
-`r tabs("global_model", "Results of linear regression for the full model")`
+**Table AII.1** Results of model comparison
 
-Partial regression coefficient for window-based Shannon is larger than the landscape-based Shannon coefficient, habitat (marginally) and the interaction terms. 
-
-The model explains `r round(globalr2*100, 2)`% of the variance in jay abundance. 
+The best fitting model (judged by AIC and BIC is that with the 100m window).
 
 # Model validation
 
 ```{r global_validation}
-jay_df_t$resids <- mod_global$residuals
-jay_df_t$fitted <- mod_global$fitted.values
+jay_df_best <- jay_mod %>% 
+  filter(window_size == best_mod) %>% 
+  select(data, mod_check) %>% 
+  unnest()
 
 # fitted values on the data scale
-fitted <- inv.logit(jay_df_t$fitted, eps)
+fitted <- inv.logit(jay_df_best$fitted, eps)
 
 plot_grid(
-  ggplot(jay_df_t, aes(x = fitted, y = resids)) + 
+  ggplot(jay_df_best, aes(x = fitted, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0),
-  ggplot(jay_df_t, aes(x = winshannon, y = resids)) + 
-    geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("MW Shannon"),
-  ggplot(jay_df_t, aes(x = lsshannon, y = resids)) + 
-    geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("LS Shannon"),
-  ggplot(jay_df_t, aes(x = habitat, y = resids)) + 
+  ggplot(jay_df_best, aes(x = shannon, y = resids)) + 
+    geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("MWDA Shannon (100m)"),
+  ggplot(jay_df_best, aes(x = habitat, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("Forest %"),
-  ggplot(jay_df_t, aes(x = urban, y = resids)) + 
+  ggplot(jay_df_best, aes(x = urban, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("Urban %"),
-  ggplot(jay_df_t, aes(x = bio1, y = resids)) + 
+  ggplot(jay_df_best, aes(x = bio1, y = resids)) + 
     geom_point(size = 0.1) + geom_hline(yintercept = 0) + xlab("Temperature")
 )
 ```
 
-`r figs("valid", "Residuals plotted against fitted values and all predictors")`
+**Figure AII.4** Residuals plotted against fitted values and all predictors.
 
 There is some patterning in the residuals, but overall a reasonable model fit. The lowest fitted value is `r round(min(fitted), 2)` and the highest is `r round(max(fitted), 2)`. Much better conformity to assumptions and range of predicted values than either when fit using untransformed response with either Gaussian  or binomial distribution. 
 
-# Collinearity diagnostics
-
-Due to the high correlations between the two Shannon measures and Forest %, we will use some in-depth collinearity diagnostics
-
-1. Variance inflation factor (not overly relevant due to large sample size)
-2. Condition index and variance decomposition
-3. Stability under perturbation analysis
-4. Stability under data sub-sampling
-
-## Variance inflation factor
-
-```{r vif}
-vif(mod_global) %>% kable(digits = 2, col.names = c("VIF"))
-```
-
-`r tabs("vif", "Variance inflation factors for each term in the global model")`
-
-Although these variance inflation factors may seem high, due to the large sample size (and that we mostly still detect effects) we do not see these as problematic; although it may explain why we do not detect an effect of LS Shannon. See [O'Brien 2007](https://link.springer.com/article/10.1007/s11135-006-9018-6) for warnings on rule-of-thumb application of multicollinearity diagnostics. 
-
-## Condition index and variance decomposition
-
-See [Callaghan and Chen 2008](http://pareonline.net/getvn.asp?v=13&n=5) for information on how to interpret condition indices and variance decomposition (but use D. Belsley, E. Kuh, and R. Welsch (1980). Regression Diagnostics. Wiley. as citation). In short, rows in the below table with a high condition index (first column, high is > 10 - moderate to strong collinearity, > 30 - severe collinearity) which are associated with high variance of regression estimate (the rest of the table) will cause a problem in the analysis. 
-
-```{r condition}
-mod_diag <- colldiag(mod_global) %>% lapply(as.data.frame)
-mod_diag <- do.call("cbind", mod_diag)
-names(mod_diag) <- c("CI", "Intercept", "MW Shannon", "LS Shannon", 
-                     "Forest %", "Urban %", "Temp")
-kable(mod_diag, digits = 3)
-```
-
-`r tabs("condition", "Condition index and variance decomposition")`
-
-The highest condition index is `r round(max(mod_diag$CI), 2)`; this puts us in the "weak-to-moderate collinearity" range. There is high variance decomposition associated with the MW & LS Shannon (particularly LS) coefficient estimates. We will check the effect of this with some further tests on the data. 
-
-## Stability under perturbation analysis
-
-We will add some random noise to the two environmental heterogeneity measures to evaluate collinearity. 
-
-```{r perturb}
-attach(jay_df_t)
-perturb_mod <- perturb(mod_global, pvars = c("winshannon", "lsshannon"), prange=c(0.1,0.1))
-detach(jay_df_t)
-
-perturb_mod$coeff.table %>% as.tibble %>% 
-  gather(variable, value) %>% 
-  group_by(variable) %>% 
-  summarise(mean_val = mean(value), 
-            sd_val = sd(value), 
-            min_val = min(value), 
-            max_val = max(value)) %>% 
-  mutate(variable = factor(variable, levels = coefforder, 
-                           labels = gsub("\n", " ", coefflabel))) %>% 
-  arrange(variable) %>% 
-  kable(digits = 3)
-```
-
-`r tabs("perturb", "Results of perturbation analysis. Random noise was added to the two Shannon measures to the range of 0.1")`
-
-Again, there may be some issues with LS Shannon. 
-
-## Stability under data sub-sampling
-
-Now let's test this by checking the model results are stable under sub-sampling. 
-
-NB This will reduce the power to detect significant relationships (increase Type II errors).
-
-```{r model_subsample, fig.width = 12}
-model_subsample <-function(x, dat, n) { 
-  
-  dat <- sample_n(dat, n)
-  
-  mod<- lm(index10logit ~ winshannon + lsshannon + urban + bio1 +
-                   bio1:lsshannon + bio1:winshannon, 
-                 data = dat, na.action = na.fail)
-
-  res <- mod %>% coef %>% enframe(name = "variable", value = "coef") %>%
-    left_join(mod %>% confint %>% as_tibble(rownames = "variable")) %>%
-    mutate(fvariable = factor(variable, levels = coefforder, 
-                              labels = gsub("\n", " ", coefflabel))) %>%
-    arrange(fvariable) 
-  
-  r2 <- glance(mod)$r.square
-  
-  res %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% mutate(R2 = r2)
-}
-
-n <- 1500
-nsim <- 100
-out <- map_dfr(1:nsim, ~model_subsample(.x, jay_df_t, n))
-
-out_narrow <- out %>% gather(measure, value, -R2, -fvariable) %>% 
-  mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
-         measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
-  filter(grepl("Shannon", fvariable))
-
-res_narrow <- res_global %>% gather(measure, value, -fvariable, -variable) %>% 
-  mutate(measure = factor(measure, labels = c("LCI", "UCI", "Coefficient")),
-         measure = factor(measure, levels = c("LCI", "Coefficient", "UCI"))) %>% 
-  filter(grepl("Shannon", fvariable))
-```
-
-```{r subsample_plot}
-ggplot(out_narrow, aes(x = "fvariable", y = value)) + 
-  geom_jitter(size = 0.1) + 
-  facet_grid(measure~fvariable) + 
-  geom_hline(data = res_narrow, aes(yintercept = value), colour = "red") + 
-  labs(x = "Variable", y = "Coefficient estimate") + 
-  theme(axis.text.x=element_blank())
-```
-
-`r figs("subsample", "Results of subsampling analysis. For 100 replicates, 1500 points were subsampled from the total dataset and the regression calculated. Red lines show the value of the coefficient when the regression is calculated using the full dataset")`
-
-In `r figs("subsample", display = "cite")`, each point is the estimate for the model parameterised with one of the 100 samples of n = `r n` from the full dataset. The red line shows the estimate from the model parameterised using the full dataset (n = `r nrow(jay_df_t)`). The estimates are reasonably robust to sub-sampling the data (not much variation in estimates and very few changes to non-significant). As is $R^2$. 
-
-```{comp_r2}
-ggplot(data = out, aes(x = R2)) + 
-  geom_histogram() + 
-  geom_vline(xintercept = globalr2)
-```
-
-`r figs("subsample_r2", "$R^2$ distribution for each replicate in the subsampling analysis.")`
-
-## Collinearity in regression coefficients
-
-Finally, we need to check that we do not have extreme collinearity in the parameter estimates. 
-
-```{r coef_colin}
-coef_cov <- cov2cor(vcov(mod_global)) 
-
-coef_cov%>% 
-  as.tibble(rownames = "variable") %>% 
-  kable(digits = 2)
-```
-
-`r tabs("coef_colin", "Pairwise correlations between coefficient estimates from the full model")`
-
-Here we have problems. MW Shannon and LS Shannon coefficient estimates, as well as the interaction terms, are extremely correlated. Note that this is not necessarily an issue because we would not want to estimate both in reality. 
-
-# Commonality analysis
-
-Commonality analysis allows us to understand the importance of different variables despite  collinearity in the model. This method also does not suffer from issues such as the order of covariate entry which affects stepwise regression techniques. See [Kraha et al. 2012](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3303138/) and [Ray-Mukherjee et al. 2014](https://besjournals.onlinelibrary.wiley.com/doi/abs/10.1111/2041-210X.12166) for explanations of this approach. For each variable we will calculate: 
-
-1. *Beta coefficients* the standardised partial regression coefficients
-2. *Structural coefficients* Squared Pearson correlation between the variable and the fitted values from the model
-3. *Unique variance* Amount of variance uniquely accounted for by the variable
-4. *Common variance* Amount of variance in common with other variables
-5. *Total variance* Total amount of variance accounted for by the variable
-
-```{r comm_global}
-ca_table <- res_global %>% 
-  filter(fvariable != "Intercept") %>% 
-  # structural coefficients
-  mutate(r_s = map_dbl(variable, function(x) {
-    out <- cor(model.matrix(mod_global)[,x], mod_global$fitted.values)
-  }),
-  r_s2 = r_s^2) %>% 
-  # unique, common and total variance
-  inner_join(calc_commonality(mod_global)$CCTotalbyVar %>% 
-               as.tibble(rownames = "variable")) %>% 
-  select(fvariable, beta = coef, `2.5 %`, `97.5 %`, r_s, r_s2, Unique, Common, Total) %>% 
-  arrange(fvariable)
-
-write_csv(ca_table, "tables/jays_commonality.csv")
-
-kable(ca_table, digits = 3)
-```
-
-`r tabs("comm_global", "Commonality analysis for the global model")`
-
-LS Shannon has no unique variance explained associated. The structure coefficient is much larger than the beta, which suggests suppression (or, in reality, that it's measuring the same thing as MW Shannon, but less effectively). MW Shannon explains `r round(ca_table[1, 8]*100, 2)`% of the total variance in the data (more than the `r round(ca_table[2, 8]*100, 2)` explained by LS Shannon). Temperature explains by far the most variance in the data (`r round(ca_table[6, 8]*100, 2)`). We will also get rid of Forest % because it explains very little of the variance, has no unique variance explained, and was insignificant in the model. 
-
 # Final results and plots
 
-The results we will display along with the commonality analysis will be the results of a MW-only version of the full model. We have also removed Forest % because this also did not uniquely explain any variance and was adding to potential collinearity issues.
+Results of the best model
 
-```{r model_mw}
-mod_mw <- lm(index10logit ~ urban + winshannon * bio1, 
-                 data = jay_df_t, na.action = na.fail)
+```{r model_best}
+res_best <- jay_mod %>%
+  filter(window_size == best_mod) %>% 
+  select(mod_res) %>% 
+  unnest()
 
-res_mw <- mod_mw %>% coef %>% enframe(name = "variable", value = "coef") %>%
-  left_join(mod_mw %>% confint %>% as_tibble(rownames = "variable")) %>%
-  mutate(fvariable = factor(variable, levels = coefforder, 
-                            labels = gsub("\n", " ", coefflabel))) %>%
-  arrange(fvariable) 
+r2_best <- jay_mod %>% 
+  filter(window_size == best_mod) %>% 
+  select(mod_glance) %>% 
+  unnest() %>% 
+  select(r.squared)
 
-mwr2 <- glance(mod_mw)$r.square
-
-res_mw %>% select(fvariable, coef, `2.5 %`, `97.5 %`) %>% kable(digits=3)
+res_best %>% 
+  select(term, estimate, conf.low, conf.high) %>% 
+  kable(digits=3)
 ```
 
-`r tabs("model_mw", "Results of linear regression for the final reduced model")`
+**Table AII.2** Results of linear regression for the best model.
 
-The model explains `r round(mwr2*100, 2)`% of the variance in jay abundance. 
+The model explains `r round(r2_best*100, 2)`% of the variance in jay abundance. 
 
 For those variables involved in an interaction, we plot the interaction plot; for those whose main effects we wish to interpret, we plot the effect plot. 
 
-```{r F5_jay_results_figure, fig.width=6.81102, fig.height=2.27034}
+```{r jay_results_figure, fig.width=6.81102, fig.height=6.81102}
+jay_mod_best <- jay_mod %>% 
+  filter(window_size == best_mod) %>% 
+  select(mod)
+
+jay_mod_best <- jay_mod_best[[1]][[1]]
+
+means$covariate <- ifelse(means$covariate == best_mod, "shannon", means$covariate)
+
 # need to predict from the model then convert to the original scales
 pred_vals <- bind_rows(
-  make_predictions(mod_mw, pred = "urban", interval = TRUE)$predicted %>% 
+  make_predictions(jay_mod_best, pred = "urban", interval = TRUE)[[1]] %>% 
     select(index10logit, ymax, ymin, pred = urban) %>% 
     mutate(covariate = "urban"),
-  make_predictions(mod_mw, pred = "bio1", modx = "winshannon", interval = TRUE)$predicted %>% 
+  make_predictions(jay_mod_best, pred = "habitat", interval = TRUE)[[1]] %>% 
+    select(index10logit, ymax, ymin, pred = habitat) %>% 
+    mutate(covariate = "habitat"),
+  make_predictions(jay_mod_best, pred = "bio1", modx = "shannon", interval = TRUE)[[1]] %>% 
     select(index10logit, ymax, ymin, modx_group, pred = bio1) %>% 
-    mutate(covariate = "bio1", modx = "winshannon"),
-  make_predictions(mod_mw, pred = "winshannon", modx = "bio1", interval = TRUE)$predicted %>%
-    select(index10logit, ymax, ymin, modx_group, pred = winshannon) %>% 
-    mutate(covariate = "winshannon", modx = "bio1")) %>% 
+    mutate(covariate = "bio1", modx = "shannon"),
+  make_predictions(jay_mod_best, pred = "shannon", modx = "bio1", interval = TRUE)[[1]] %>%
+    select(index10logit, ymax, ymin, modx_group, pred = shannon) %>% 
+    mutate(covariate = "shannon", modx = "bio1")) %>% 
   as.tibble %>% 
   mutate_at(c("index10logit", "ymin", "ymax"), inv.logit, eps) %>% 
   left_join(means) %>% 
@@ -518,7 +477,7 @@ pred_vals <- bind_rows(
          modx_label = fct_reorder(modx_label, modx_value))
 
 # plot the results
-winshannon_plot <- ggplot(pred_vals %>% filter(covariate == "winshannon"), 
+shannon_plot <- ggplot(pred_vals %>% filter(covariate == "shannon"), 
                      aes(x = pred, y = index10logit, group = modx_label)) + 
   geom_line(aes(lty = modx_label)) + 
   scale_linetype_manual(name = expression("Temperature (" * degree * "C)"), 
@@ -526,14 +485,14 @@ winshannon_plot <- ggplot(pred_vals %>% filter(covariate == "winshannon"),
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
   geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
   theme(legend.position = c(0.25, 0.8), legend.key.height = unit(0.1, "line")) + 
-  labs(x = "MW Shannon (1km)", 
+  labs(x = "MWDA Shannon (100 m)", 
        y = expression(paste(italic("G. glandarius"), 
                             " abundance index (" %+-% "95% CI)")))
 
 bio1_plot <- ggplot(pred_vals %>% filter(covariate == "bio1"), 
                      aes(x = pred, y = index10logit, group = modx_label)) + 
   geom_line(aes(lty = modx_label)) + 
-  scale_linetype_manual(name = "MW Shannon (1km)", 
+  scale_linetype_manual(name = "MWDA Shannon (100 m)", 
                         values = c("dashed", "solid", "dotdash")) + 
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
   geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
@@ -546,39 +505,55 @@ urban_plot <- ggplot(pred_vals %>% filter(covariate == "urban"),
   geom_line() + 
   scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
   geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
-  labs(x = "Urban %", 
-       y = "")
+  labs(x = "Urban %",
+       y = expression(paste(italic("G. glandarius"), 
+                            " abundance index (" %+-% "95% CI)")))
 
-plot_grid(winshannon_plot, bio1_plot, urban_plot, nrow = 1)
+habitat_plot <- ggplot(pred_vals %>% filter(covariate == "habitat"),
+                       aes(x = pred, y = index10logit)) + 
+  geom_line() +   
+  scale_y_continuous(limits = c(0, 1), breaks = c(0, 0.25, 0.5, 0.75, 1)) + 
+  geom_ribbon(aes(ymin = ymin, ymax = ymax), alpha = 0.2) + 
+  labs(x = "Forest %", 
+       y = "")
+  
+plot_grid(shannon_plot, bio1_plot, urban_plot, habitat_plot, nrow = 2)
 ```
 
-`r figs("res_plot", "Main effect estimates for the full model")`
+**Figure AII.5** Main effect estimates for the full model.
+
+```{r results_plot_out, echo = FALSE}
+out <- plot_grid(shannon_plot, bio1_plot, urban_plot, habitat_plot, nrow = 2)
+
+ggsave("figures/F4_jay_results.png", out, width=6.81102, height=6.81102, units = "in", dpi = 300)
+ggsave("figures/F4_jay_results.tiff", out, width=6.81102, height=6.81102, units = "in", dpi = 300)
+```
 
 We can also calculate the Johnson-Neyman interval to understand the range of moderator values for which the interaction term is significant. We then convert back to the measurement scale
 
 ```{r jn}
-sim_slopes(mod_mw, 
-           pred = "winshannon", 
+sim_slopes(jay_mod_best, 
+           pred = "shannon", 
            modx = "bio1", 
            johnson_neyman = TRUE)$jn
-# significant for -3.80 to 1.91 - HC'd so update if model changes
-winshannon_slope <- paste(round(c(-3.80, 1.91) * 
+# significant for -2.41 to 1.91 - HC'd so update if model changes
+shannon_slope <- paste(10*round(c(-2.41, 1.91) * 
                                   filter(means, covariate == "bio1") %>% pull(sd) + 
                                   filter(means, covariate == "bio1") %>% pull(mean), 2), 
                           collapse = ", ")
 
-sim_slopes(mod_mw, 
+sim_slopes(jay_mod_best, 
            pred = "bio1", 
-           modx = "winshannon", 
+           modx = "shannon", 
            johnson_neyman = TRUE)$jn
 # significant for full range of data - HC'd so update if model changes
-temp_slope <- paste(round(c(-2.06, 4.00) * 
-                            filter(means, covariate == "winshannon") %>% pull(sd) + 
-                            filter(means, covariate == "winshannon") %>% pull(mean), 2), 
+temp_slope <- paste(round(c(-1.89, 4.18) * 
+                            filter(means, covariate == "shannon") %>% pull(sd) + 
+                            filter(means, covariate == "shannon") %>% pull(mean), 2), 
                     collapse = ", ")
 ```
 
-On the measurement scale, MW Shannon (1km) slope is significant in Temperature range `r winshannon_slope` (all but the lowest temperatures) and Temperature slope is significant in MW Shannon (1km) range `r temp_slope` (the full range of the data)
+On the measurement scale, MWDA Shannon (1km) slope is significant in Temperature range `r shannon_slope` (all but the lowest temperatures) and Temperature slope is significant in MWDA Shannon (1km) range `r temp_slope` (the full range of the data)
 
 # Collinearity diagnostics of the final model
 
@@ -587,25 +562,28 @@ We do not expect collinearity in the final model due to low correlations between
 ## Variance inflation factor
 
 ```{r vif_mw}
-vif(mod_mw) %>% kable(digits = 2, col.names = c("VIF"))
+vif(jay_mod_best) %>% 
+  kable(digits = 2, col.names = c("VIF"))
 ```
 
-`r tabs("vif_mw", "Variance inflation factors for each term in the final model")`
+**Table AII.3** Variance inflation factors for each term in the final model.
 
 ## Condition index and variance decomposition
 
 ```{r condition_mw}
-mod_diag <- colldiag(mod_mw) %>% lapply(as.data.frame)
+mod_diag <- colldiag(jay_mod_best) %>% 
+  lapply(as.data.frame)
 mod_diag <- do.call("cbind", mod_diag)
-names(mod_diag) <- c("CI", "Intercept", "MW Shannon", "Urban %", "Temp")
+names(mod_diag) <- c("CI", "Intercept", "MWDA Shannon", "Forest %", "Urban %", "Temp")
 kable(mod_diag, digits = 3)
 ```
 
-`r tabs("condition_mw", "Condition index and variance decomposition")`
+**Table AII.4** Condition index and variance decomposition.
 
 # Session Info
+
 ```{r}
 session <- devtools::session_info()
 session[[1]]
-session[[2]] %>% kable
+session[[2]] %>% select(package, loadedversion, source) %>% kable
 ```
