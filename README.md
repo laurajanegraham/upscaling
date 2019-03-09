@@ -1,5 +1,22 @@
-# Window-based upscaling
+Incorporating fine-scale environmental heterogeneity into broad-extent
+models
+================
 
-This repository holds the analysis for the window-based upscaling manuscript currently in preparation. 
+This repository holds the analysis for Graham et al. (in press).
 
-Code to replicate all analyses, figures and supplementary material for this paper is in runscript.R. Note that the data will need to be present and in the correct location (links to all data sources except for the *Garrulus glandarius* abundance data are in the .Rmd files). 
+  - The simulations from the manuscript can be replicated by following
+    `AppendixI.pdf`
+  - The *Garrulus glandarius* case study from the manuscript can be
+    replicated by following `AppendixII.pdf` - note that Land Cover Map
+    2007 (25m resolution) data will be required for this case study.
+    These data are available from [Centre for Ecology and
+    Hydrology](https://www.ceh.ac.uk/services/land-cover-map-2007)
+    (licence required) or can be downloaded (with institutional licence)
+    from [Edina digimap](https://digimap.edina.ac.uk/).
+
+## References
+
+Graham, Laura Jane, Rebecca Spake, Simon Gillings, Kevin Watts, and
+Felix Eigenbrod. In press. “Incorporating Fine-Scale Environmental
+Heterogeneity into Broad-Extent Models.” *Methods in Ecology and
+Evolution*.
