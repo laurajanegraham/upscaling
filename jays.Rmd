@@ -1,9 +1,6 @@
 ---
 title: "Appendix II: *Garrulus glandarius* case study"
-output: 
-  html_document: 
-    self-contained: yes
-    theme: flatly
+output: pdf_document
 ---
 
 ```{r, include=FALSE}
@@ -236,7 +233,8 @@ jay_df <- jay_sp %>%
 What do the variables look like spatially?
 
 ```{r jay_data_figure}
-gb_outline <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp") %>% 
+gb_outline <- st_read("~/DATA/ADMINISTRATIVE/gb_shapefile/GBR_adm1.shp", 
+                      quiet = TRUE) %>% 
   filter(NAME_1 != "Northern Ireland") %>% 
   st_crop(xmin = -8, ymin = 49.865417, xmax = 1.764168, ymax = 61.527084)
 
@@ -310,7 +308,8 @@ corrs <- jay_df %>%
   correlate(method = "spearman", quiet = TRUE) %>% 
   shave
 
-rplot(corrs, shape = 15, print_cor = TRUE) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+rplot(corrs, shape = 15, print_cor = TRUE) + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
 
 **Figure AII.3** Pairwise Spearman correlations between *Garrulus glandarius* relative abundance and covariates.
@@ -365,7 +364,9 @@ jay_mod <- jay_df_t %>%
                                         data = x, na.action = na.fail)),
          mod_res = map(mod, function(x) bind_cols(tidy(x), confint_tidy(x))),
          mod_glance = map(mod, glance),
-         mod_check = map(mod, function(x) tibble(resids = x$residuals, fitted = x$fitted)))
+         mod_check = map(mod, function(x) {
+           tibble(resids = x$residuals, fitted = x$fitted)
+         }))
 
 mod_comp <- jay_mod %>% 
   select(window_size, mod_glance) %>% 

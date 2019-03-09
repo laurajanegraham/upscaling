@@ -1,9 +1,6 @@
 ---
 title: "Appendix I: simulated landscapes"
-output: 
-  html_document: 
-    self-contained: yes
-    theme: flatly
+output: pdf_document
 ---
 
 ```{r, include = FALSE}
