@@ -2,6 +2,8 @@ Incorporating fine-scale environmental heterogeneity into broad-extent
 models
 ================
 
+[![DOI](https://zenodo.org/badge/124073847.svg)](https://zenodo.org/badge/latestdoi/124073847)
+
 This repository holds the analysis for Graham et al. (in press).
 
   - The simulations from the manuscript can be replicated by following

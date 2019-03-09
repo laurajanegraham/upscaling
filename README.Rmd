@@ -1,12 +1,13 @@
 ---
 title: "Incorporating fine-scale environmental heterogeneity into broad-extent models"
 output: github_document
-bibliography: refs.bib
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
+
+[![DOI](https://zenodo.org/badge/124073847.svg)](https://zenodo.org/badge/latestdoi/124073847)
 
 This repository holds the analysis for Graham et al. (in press). 
 
