@@ -4,7 +4,7 @@ models
 
 [![DOI](https://zenodo.org/badge/124073847.svg)](https://zenodo.org/badge/latestdoi/124073847)
 
-This repository holds the analysis for Graham et al. (in press).
+This repository holds the analysis for [Graham et al. (2019)](https://doi.org/10.1111/2041-210X.13177).
 
   - The simulations from the manuscript can be replicated by following
     `AppendixI.pdf`
@@ -19,6 +19,6 @@ This repository holds the analysis for Graham et al. (in press).
 ## References
 
 Graham, Laura Jane, Rebecca Spake, Simon Gillings, Kevin Watts, and
-Felix Eigenbrod. In press. “Incorporating Fine-Scale Environmental
+Felix Eigenbrod. 2019. “Incorporating Fine-Scale Environmental
 Heterogeneity into Broad-Extent Models.” *Methods in Ecology and
-Evolution*.
+Evolution*. https://doi.org/10.1111/2041-210X.13177
